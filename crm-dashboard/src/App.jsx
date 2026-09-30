@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 
-const API_URL = "http://localhost:5000";
+const API_URL = "https://crm-api-408i.onrender.com";
 const TOKEN_KEY = "crm_token";
 const USER_KEY = "crm_user";
 const THEME_KEY = "crm_dark";
