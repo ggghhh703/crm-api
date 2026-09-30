@@ -1,2830 +1,125 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-
 const API_URL = "https://crm-api-408i.onrender.com";
+
 const TOKEN_KEY = "crm_token";
 const USER_KEY = "crm_user";
-const THEME_KEY = "crm_dark";
+const THEME_KEY = "crm_dark_mode";
 
-const api = async (path, options = {}) => {
-  const token = localStorage.getItem(TOKEN_KEY);
+const PLATFORMS = [
+  "Facebook",
+  "Instagram",
+  "WhatsApp",
+  "Google",
+  "Referral",
+  "Website",
+  "Other",
+];
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
+const LEAD_STATUSES = [
+  "New",
+  "Contacted",
+  "Converted",
+  "Closed",
+];
 
-  const text = await response.text();
-
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-
-  if (response.status === 401) {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-  }
-
-  if (!response.ok) {
-    throw new Error(data.message || `Request failed: ${response.status}`);
-  }
-
-  return data;
-};
-
-const getArray = (data, keys = []) => {
-  if (Array.isArray(data)) return data;
-
-  for (const key of keys) {
-    if (Array.isArray(data?.[key])) return data[key];
-  }
-
-  if (Array.isArray(data?.data)) return data.data;
-
-  return [];
-};
+const DEAL_STATUSES = [
+  "Open",
+  "Won",
+  "Lost",
+];
 
 const emptyCustomer = {
   name: "",
+  email: "",
+  phone: "",
+  company: "",
+};
+
+const emptyLead = {
+  name: "",
   phone: "",
   email: "",
+  message: "",
+  platform: "Other",
+  externalLeadId: "",
+  status: "New",
 };
 
 const emptyDeal = {
   title: "",
-  customer: "",
-  company: "",
-  description: "",
+  customerId: "",
   amount: "",
-  currency: "INR",
-  status: "New",
-  stage: "Lead",
-  priority: "Medium",
-  probability: 0,
-  closingDate: "",
-  owner: "",
+  status: "Open",
   notes: "",
 };
 
 const emptyInteraction = {
+  customerId: "",
   type: "Call",
-  subject: "",
-  notes: "",
-  followUpDate: "",
-  createdBy: "Admin",
+  message: "",
 };
 
-const interactionIcon = (type) => {
-  if (type === "Call") return "📞";
-  if (type === "WhatsApp") return "💬";
-  if (type === "Email") return "📧";
-  if (type === "Note") return "📝";
-  return "💬";
-};
+function getArray(data, key) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.[key])) return data[key];
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.data?.[key])) return data.data[key];
+  return [];
+}
 
-function App() {
-  const [token, setToken] = useState(
-    () => localStorage.getItem(TOKEN_KEY) || ""
-  );
+async function api(path, options = {}, token = "") {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
 
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(USER_KEY)) || null;
-    } catch {
-      return null;
-    }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
   });
 
-  const [authMode, setAuthMode] = useState("login");
-  const [authForm, setAuthForm] = useState({
-    name: "",
-    password: "",
-  });
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState("");
-
-  const [page, setPage] = useState("Dashboard");
-  const [dark, setDark] = useState(
-    () => localStorage.getItem(THEME_KEY) === "true"
-  );
-
-  const [customers, setCustomers] = useState([]);
-  const [deals, setDeals] = useState([]);
-  const [interactions, setInteractions] = useState([]);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const [customerModal, setCustomerModal] = useState(false);
-  const [dealModal, setDealModal] = useState(false);
-  const [interactionModal, setInteractionModal] = useState(false);
-
-  const [editingCustomer, setEditingCustomer] = useState(null);
-  const [editingDeal, setEditingDeal] = useState(null);
-
-  const [customerForm, setCustomerForm] = useState(emptyCustomer);
-  const [dealForm, setDealForm] = useState(emptyDeal);
-  const [interactionForm, setInteractionForm] =
-    useState(emptyInteraction);
-
-  const [communicationCustomer, setCommunicationCustomer] =
-    useState(null);
-
-  const [communicationOpen, setCommunicationOpen] = useState(false);
-
-  const [
-    selectedCustomerForInteraction,
-    setSelectedCustomerForInteraction,
-  ] = useState(null);
-
-  const [interactionLoading, setInteractionLoading] = useState(false);
-  const [search, setSearch] = useState("");
-
-  const theme = dark
-    ? {
-        bg: "#0f172a",
-        card: "#1e293b",
-        text: "#f8fafc",
-        muted: "#94a3b8",
-        border: "#334155",
-        input: "#0f172a",
-        sidebar: "#020617",
-      }
-    : {
-        bg: "#f1f5f9",
-        card: "#ffffff",
-        text: "#0f172a",
-        muted: "#64748b",
-        border: "#e2e8f0",
-        input: "#ffffff",
-        sidebar: "#111827",
-      };
-
-  useEffect(() => {
-    localStorage.setItem(THEME_KEY, String(dark));
-  }, [dark]);
-
-  useEffect(() => {
-    if (token) {
-      loadAll();
-    }
-  }, [token]);
-
-  const handleAuthSubmit = async (e) => {
-    e.preventDefault();
-
-    const name = authForm.name.trim();
-    const password = authForm.password;
-
-    if (!name || !password) {
-      setAuthError("ID and password are required.");
-      return;
-    }
-
-    setAuthLoading(true);
-    setAuthError("");
-
-    try {
-      const endpoint =
-        authMode === "login" ? "/auth/login" : "/auth/signup";
-
-      const data = await api(endpoint, {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          password,
-        }),
-      });
-
-      if (!data.token) {
-        throw new Error("Authentication token was not received.");
-      }
-
-      localStorage.setItem(TOKEN_KEY, data.token);
-
-      if (data.user) {
-        localStorage.setItem(
-          USER_KEY,
-          JSON.stringify(data.user)
-        );
-      }
-
-      setToken(data.token);
-      setCurrentUser(data.user || { name });
-      setAuthForm({
-        name: "",
-        password: "",
-      });
-      setPage("Dashboard");
-    } catch (err) {
-      console.error(err);
-      setAuthError(
-        err.message ||
-          (authMode === "login"
-            ? "Unable to login."
-            : "Unable to create account.")
-      );
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-
-    setToken("");
-    setCurrentUser(null);
-
-    setCustomers([]);
-    setDeals([]);
-    setInteractions([]);
-
-    setCommunicationOpen(false);
-    setCommunicationCustomer(null);
-  };
-
-  const loadAll = async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const [customerData, dealData] = await Promise.all([
-        api("/customers"),
-        api("/deals"),
-      ]);
-
-      setCustomers(
-        getArray(customerData, ["customers", "data"])
-      );
-
-      setDeals(getArray(dealData, ["deals", "data"]));
-    } catch (err) {
-      console.error(err);
-      setError(err.message || "Unable to load CRM data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadInteractions = async (customerId) => {
-    if (!customerId) return;
-
-    setInteractionLoading(true);
-
-    try {
-      const data = await api(
-        `/interactions?customer=${customerId}`
-      );
-
-      setInteractions(
-        getArray(data, ["interactions", "data"])
-      );
-    } catch (err) {
-      console.error(err);
-      setInteractions([]);
-      setError(
-        err.message || "Unable to load interactions"
-      );
-    } finally {
-      setInteractionLoading(false);
-    }
-  };
-
-  const openCommunication = async (customer) => {
-    setCommunicationCustomer(customer);
-    setCommunicationOpen(true);
-    await loadInteractions(customer._id);
-  };
-
-  const closeCommunication = () => {
-    setCommunicationOpen(false);
-    setCommunicationCustomer(null);
-    setInteractions([]);
-  };
-
-  const openAddInteraction = (type = "Call") => {
-    if (!communicationCustomer) {
-      setError("Please select a customer first.");
-      return;
-    }
-
-    setSelectedCustomerForInteraction(
-      communicationCustomer
-    );
-
-    setInteractionForm({
-      ...emptyInteraction,
-      type,
-      createdBy: currentUser?.name || "Admin",
-    });
-
-    setInteractionModal(true);
-  };
-
-  const saveInteraction = async (e) => {
-    e.preventDefault();
-
-    if (!selectedCustomerForInteraction?._id) {
-      setError("Customer not selected.");
-      return;
-    }
-
-    if (!interactionForm.notes.trim()) {
-      setError("Please enter interaction notes.");
-      return;
-    }
-
-    try {
-      setError("");
-
-      await api("/interactions", {
-        method: "POST",
-        body: JSON.stringify({
-          customer: selectedCustomerForInteraction._id,
-          type: interactionForm.type,
-          subject: interactionForm.subject,
-          notes: interactionForm.notes,
-          followUpDate:
-            interactionForm.followUpDate || null,
-          createdBy:
-            interactionForm.createdBy ||
-            currentUser?.name ||
-            "Admin",
-        }),
-      });
-
-      setInteractionModal(false);
-      setInteractionForm(emptyInteraction);
-
-      await loadInteractions(
-        selectedCustomerForInteraction._id
-      );
-    } catch (err) {
-      console.error(err);
-      setError(
-        err.message || "Failed to save interaction"
-      );
-    }
-  };
-
-  const deleteInteraction = async (id) => {
-    if (!window.confirm("Delete this interaction?")) return;
-
-    try {
-      await api(`/interactions/${id}`, {
-        method: "DELETE",
-      });
-
-      if (communicationCustomer?._id) {
-        await loadInteractions(
-          communicationCustomer._id
-        );
-      }
-    } catch (err) {
-      setError(
-        err.message || "Failed to delete interaction"
-      );
-    }
-  };
-
-  const openCall = (customer) => {
-    if (!customer?.phone) {
-      setError("Customer phone number is missing.");
-      return;
-    }
-
-    window.location.href = `tel:${customer.phone}`;
-  };
-
-  const openWhatsApp = (customer) => {
-    if (!customer?.phone) {
-      setError("Customer phone number is missing.");
-      return;
-    }
-
-    let phone = String(customer.phone).replace(
-      /\D/g,
-      ""
-    );
-
-    if (phone.length === 10) {
-      phone = `91${phone}`;
-    }
-
-    window.open(
-      `https://wa.me/${phone}`,
-      "_blank"
-    );
-  };
-
-  const openEmail = (customer) => {
-    if (!customer?.email) {
-      setError("Customer email is missing.");
-      return;
-    }
-
-    window.location.href = `mailto:${customer.email}`;
-  };
-
-  const openCustomerModal = (customer = null) => {
-    setEditingCustomer(customer);
-
-    if (customer) {
-      setCustomerForm({
-        name: customer.name || "",
-        phone: customer.phone || "",
-        email: customer.email || "",
-      });
-    } else {
-      setCustomerForm(emptyCustomer);
-    }
-
-    setCustomerModal(true);
-  };
-
-  const saveCustomer = async (e) => {
-    e.preventDefault();
-
-    if (
-      !customerForm.name.trim() ||
-      !customerForm.phone.trim()
-    ) {
-      setError("Name and phone are required.");
-      return;
-    }
-
-    try {
-      setError("");
-
-      if (editingCustomer) {
-        await api(
-          `/customers/${editingCustomer._id}`,
-          {
-            method: "PUT",
-            body: JSON.stringify(customerForm),
-          }
-        );
-      } else {
-        await api("/customers", {
-          method: "POST",
-          body: JSON.stringify(customerForm),
-        });
-      }
-
-      setCustomerModal(false);
-      setEditingCustomer(null);
-      setCustomerForm(emptyCustomer);
-
-      await loadAll();
-    } catch (err) {
-      setError(
-        err.message || "Failed to save customer"
-      );
-    }
-  };
-
-  const deleteCustomer = async (id) => {
-    if (!window.confirm("Delete this customer?")) return;
-
-    try {
-      await api(`/customers/${id}`, {
-        method: "DELETE",
-      });
-
-      await loadAll();
-    } catch (err) {
-      setError(
-        err.message || "Failed to delete customer"
-      );
-    }
-  };
-
-  const openDealModal = (deal = null) => {
-    setEditingDeal(deal);
-
-    if (deal) {
-      setDealForm({
-        title: deal.title || "",
-        customer:
-          typeof deal.customer === "object"
-            ? deal.customer?._id || ""
-            : deal.customer || "",
-        company: deal.company || "",
-        description: deal.description || "",
-        amount: deal.amount ?? "",
-        currency: deal.currency || "INR",
-        status: deal.status || "New",
-        stage: deal.stage || "Lead",
-        priority: deal.priority || "Medium",
-        probability: deal.probability ?? 0,
-        closingDate: deal.closingDate
-          ? String(deal.closingDate).slice(0, 10)
-          : "",
-        owner:
-          deal.owner ||
-          currentUser?.name ||
-          "",
-        notes: deal.notes || "",
-      });
-    } else {
-      setDealForm({
-        ...emptyDeal,
-        owner: currentUser?.name || "",
-      });
-    }
-
-    setDealModal(true);
-  };
-
-  const saveDeal = async (e) => {
-    e.preventDefault();
-
-    if (!dealForm.title.trim()) {
-      setError("Deal title is required.");
-      return;
-    }
-
-    try {
-      setError("");
-
-      const payload = {
-        ...dealForm,
-        amount:
-          dealForm.amount === ""
-            ? 0
-            : Number(dealForm.amount),
-        probability: Number(
-          dealForm.probability || 0
-        ),
-      };
-
-      if (editingDeal) {
-        await api(`/deals/${editingDeal._id}`, {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await api("/deals", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-      }
-
-      setDealModal(false);
-      setEditingDeal(null);
-      setDealForm(emptyDeal);
-
-      await loadAll();
-    } catch (err) {
-      setError(
-        err.message || "Failed to save deal"
-      );
-    }
-  };
-
-  const deleteDeal = async (id) => {
-    if (!window.confirm("Delete this deal?")) return;
-
-    try {
-      await api(`/deals/${id}`, {
-        method: "DELETE",
-      });
-
-      await loadAll();
-    } catch (err) {
-      setError(
-        err.message || "Failed to delete deal"
-      );
-    }
-  };
-
-  const filteredCustomers = useMemo(() => {
-    const value = search.toLowerCase().trim();
-
-    if (!value) return customers;
-
-    return customers.filter((customer) =>
-      [
-        customer.name,
-        customer.phone,
-        customer.email,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(value)
-    );
-  }, [customers, search]);
-
-  const totalRevenue = useMemo(() => {
-    return deals
-      .filter((deal) => deal.status === "Won")
-      .reduce(
-        (sum, deal) =>
-          sum + Number(deal.amount || 0),
-        0
-      );
-  }, [deals]);
-
-  const activeDeals = deals.filter(
-    (deal) =>
-      deal.status !== "Won" &&
-      deal.status !== "Lost"
-  ).length;
-
-  const wonDeals = deals.filter(
-    (deal) => deal.status === "Won"
-  ).length;
-
-  const lostDeals = deals.filter(
-    (deal) => deal.status === "Lost"
-  ).length;
-
-  const pipelineValue = deals
-    .filter(
-      (deal) =>
-        deal.status !== "Won" &&
-        deal.status !== "Lost"
-    )
-    .reduce(
-      (sum, deal) =>
-        sum + Number(deal.amount || 0),
-      0
-    );
-
-  const navItems = [
-    ["Dashboard", "📊"],
-    ["Customers", "👥"],
-    ["Deals", "💼"],
-    ["Tasks", "✅"],
-    ["Reports", "📈"],
-    ["Settings", "⚙️"],
-  ];
-
-  /* LOGIN / SIGNUP SCREEN */
-
-  if (!token) {
-    return (
-      <AuthScreen
-        mode={authMode}
-        setMode={setAuthMode}
-        form={authForm}
-        setForm={setAuthForm}
-        loading={authLoading}
-        error={authError}
-        onSubmit={handleAuthSubmit}
-      />
+  let data = {};
+
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data.message ||
+        data.error ||
+        `Request failed (${response.status})`
     );
   }
 
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        background: theme.bg,
-        color: theme.text,
-        fontFamily:
-          "Inter, Arial, Helvetica, sans-serif",
-      }}
-    >
-      {/* SIDEBAR */}
-
-      <aside
-        style={{
-          width: 240,
-          minHeight: "100vh",
-          background: theme.sidebar,
-          color: "#fff",
-          padding: 20,
-          boxSizing: "border-box",
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 24,
-            fontWeight: 800,
-            marginBottom: 8,
-          }}
-        >
-          🚀 CRM Pro
-        </div>
-
-        <div
-          style={{
-            color: "#94a3b8",
-            fontSize: 12,
-            marginBottom: 28,
-          }}
-        >
-          Business Management
-        </div>
-
-        {navItems.map(([name, icon]) => (
-          <button
-            key={name}
-            type="button"
-            onClick={() => setPage(name)}
-            style={{
-              width: "100%",
-              padding: "13px 14px",
-              marginBottom: 8,
-              border: "none",
-              borderRadius: 10,
-              textAlign: "left",
-              cursor: "pointer",
-              background:
-                page === name
-                  ? "#2563eb"
-                  : "transparent",
-              color: "#fff",
-              fontSize: 15,
-              fontWeight:
-                page === name ? 700 : 500,
-            }}
-          >
-            {icon} &nbsp; {name}
-          </button>
-        ))}
-
-        <div
-          style={{
-            marginTop: 25,
-            padding: 14,
-            borderRadius: 12,
-            background:
-              "rgba(255,255,255,0.08)",
-            fontSize: 13,
-            color: "#cbd5e1",
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 700,
-              color: "#fff",
-            }}
-          >
-            👤 {currentUser?.name || "User"}
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              color: "#86efac",
-            }}
-          >
-            ● CRM Connected
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={logout}
-          style={{
-            width: "100%",
-            marginTop: 15,
-            padding: "11px 14px",
-            borderRadius: 10,
-            border:
-              "1px solid rgba(255,255,255,0.12)",
-            background:
-              "rgba(239,68,68,0.15)",
-            color: "#fca5a5",
-            cursor: "pointer",
-            fontWeight: 700,
-          }}
-        >
-          🚪 Logout
-        </button>
-      </aside>
-
-      {/* MAIN */}
-
-      <main
-        style={{
-          flex: 1,
-          minWidth: 0,
-          padding: 24,
-          boxSizing: "border-box",
-        }}
-      >
-        {/* HEADER */}
-
-        <header
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 24,
-            gap: 15,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 28,
-              }}
-            >
-              {page}
-            </h1>
-
-            <div
-              style={{
-                color: theme.muted,
-                marginTop: 5,
-              }}
-            >
-              Welcome back,{" "}
-              <strong>
-                {currentUser?.name || "User"}
-              </strong>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setDark(!dark)}
-            style={buttonStyle(
-              theme,
-              "#2563eb"
-            )}
-          >
-            {dark ? "☀️ Light" : "🌙 Dark"}
-          </button>
-        </header>
-
-        {/* ERROR */}
-
-        {error && (
-          <div
-            style={{
-              background: "#fee2e2",
-              color: "#991b1b",
-              border:
-                "1px solid #fecaca",
-              padding: 14,
-              borderRadius: 10,
-              marginBottom: 18,
-              display: "flex",
-              justifyContent:
-                "space-between",
-              gap: 10,
-            }}
-          >
-            <span>{error}</span>
-
-            <button
-              type="button"
-              onClick={() => setError("")}
-              style={{
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* DASHBOARD */}
-
-        {page === "Dashboard" && (
-          <>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "repeat(auto-fit,minmax(180px,1fr))",
-                gap: 18,
-                marginBottom: 22,
-              }}
-            >
-              <StatCard
-                theme={theme}
-                title="Customers"
-                value={customers.length}
-                icon="👥"
-              />
-
-              <StatCard
-                theme={theme}
-                title="Total Deals"
-                value={deals.length}
-                icon="💼"
-              />
-
-              <StatCard
-                theme={theme}
-                title="Active Deals"
-                value={activeDeals}
-                icon="🔥"
-              />
-
-              <StatCard
-                theme={theme}
-                title="Won Deals"
-                value={wonDeals}
-                icon="🏆"
-              />
-
-              <StatCard
-                theme={theme}
-                title="Pipeline"
-                value={`₹${pipelineValue.toLocaleString(
-                  "en-IN"
-                )}`}
-                icon="📈"
-              />
-
-              <StatCard
-                theme={theme}
-                title="Revenue"
-                value={`₹${totalRevenue.toLocaleString(
-                  "en-IN"
-                )}`}
-                icon="💰"
-              />
-            </div>
-
-            <Card theme={theme}>
-              <div
-                style={
-                  sectionHeaderStyle
-                }
-              >
-                <div>
-                  <h2 style={{ margin: 0 }}>
-                    Recent Deals
-                  </h2>
-
-                  <p
-                    style={mutedStyle(theme)}
-                  >
-                    Your latest sales activity
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPage("Deals")
-                  }
-                  style={buttonStyle(
-                    theme,
-                    "#2563eb"
-                  )}
-                >
-                  View Deals
-                </button>
-              </div>
-
-              {loading ? (
-                <Loading />
-              ) : deals.length === 0 ? (
-                <Empty text="No deals found." />
-              ) : (
-                <SimpleTable
-                  theme={theme}
-                  headers={[
-                    "Title",
-                    "Amount",
-                    "Status",
-                    "Stage",
-                    "Priority",
-                  ]}
-                  rows={deals
-                    .slice(0, 8)
-                    .map((deal) => [
-                      deal.title || "-",
-                      `₹${Number(
-                        deal.amount || 0
-                      ).toLocaleString(
-                        "en-IN"
-                      )}`,
-                      deal.status || "-",
-                      deal.stage || "-",
-                      deal.priority || "-",
-                    ])}
-                />
-              )}
-            </Card>
-          </>
-        )}
-
-        {/* CUSTOMERS */}
-
-        {page === "Customers" && (
-          <Card theme={theme}>
-            <div
-              style={sectionHeaderStyle}
-            >
-              <div>
-                <h2 style={{ margin: 0 }}>
-                  Customers
-                </h2>
-
-                <p
-                  style={mutedStyle(theme)}
-                >
-                  Manage your customers
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  openCustomerModal()
-                }
-                style={buttonStyle(
-                  theme,
-                  "#16a34a"
-                )}
-              >
-                + Add Customer
-              </button>
-            </div>
-
-            <input
-              value={search}
-              onChange={(e) =>
-                setSearch(e.target.value)
-              }
-              placeholder="🔎 Search customer..."
-              style={{
-                ...inputStyle(theme),
-                marginTop: 18,
-              }}
-            />
-
-            {loading ? (
-              <Loading />
-            ) : filteredCustomers.length ===
-              0 ? (
-              <Empty text="No customers found." />
-            ) : (
-              <SimpleTable
-                theme={theme}
-                headers={[
-                  "Name",
-                  "Phone",
-                  "Email",
-                  "Communication",
-                  "Actions",
-                ]}
-                rows={filteredCustomers.map(
-                  (customer) => [
-                    customer.name || "-",
-                    customer.phone || "-",
-                    customer.email || "-",
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 6,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <SmallButton
-                        text="📞"
-                        onClick={() =>
-                          openCall(customer)
-                        }
-                      />
-
-                      <SmallButton
-                        text="💬"
-                        onClick={() =>
-                          openWhatsApp(
-                            customer
-                          )
-                        }
-                      />
-
-                      <SmallButton
-                        text="📧"
-                        onClick={() =>
-                          openEmail(customer)
-                        }
-                      />
-
-                      <SmallButton
-                        text="📝 History"
-                        onClick={() =>
-                          openCommunication(
-                            customer
-                          )
-                        }
-                      />
-                    </div>,
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 7,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <SmallButton
-                        text="Edit"
-                        onClick={() =>
-                          openCustomerModal(
-                            customer
-                          )
-                        }
-                      />
-
-                      <SmallButton
-                        text="Delete"
-                        danger
-                        onClick={() =>
-                          deleteCustomer(
-                            customer._id
-                          )
-                        }
-                      />
-                    </div>,
-                  ]
-                )}
-              />
-            )}
-          </Card>
-        )}
-
-        {/* DEALS */}
-
-        {page === "Deals" && (
-          <Card theme={theme}>
-            <div
-              style={sectionHeaderStyle}
-            >
-              <div>
-                <h2 style={{ margin: 0 }}>
-                  Deals
-                </h2>
-
-                <p
-                  style={mutedStyle(theme)}
-                >
-                  Manage your sales pipeline
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  openDealModal()
-                }
-                style={buttonStyle(
-                  theme,
-                  "#16a34a"
-                )}
-              >
-                + Add Deal
-              </button>
-            </div>
-
-            {loading ? (
-              <Loading />
-            ) : deals.length === 0 ? (
-              <Empty text="No deals found." />
-            ) : (
-              <SimpleTable
-                theme={theme}
-                headers={[
-                  "Title",
-                  "Customer",
-                  "Amount",
-                  "Status",
-                  "Stage",
-                  "Priority",
-                  "Actions",
-                ]}
-                rows={deals.map((deal) => [
-                  deal.title || "-",
-
-                  typeof deal.customer ===
-                  "object"
-                    ? deal.customer?.name ||
-                      "-"
-                    : deal.customer || "-",
-
-                  `₹${Number(
-                    deal.amount || 0
-                  ).toLocaleString(
-                    "en-IN"
-                  )}`,
-
-                  deal.status || "-",
-                  deal.stage || "-",
-                  deal.priority || "-",
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 7,
-                    }}
-                  >
-                    <SmallButton
-                      text="Edit"
-                      onClick={() =>
-                        openDealModal(
-                          deal
-                        )
-                      }
-                    />
-
-                    <SmallButton
-                      text="Delete"
-                      danger
-                      onClick={() =>
-                        deleteDeal(
-                          deal._id
-                        )
-                      }
-                    />
-                  </div>,
-                ])}
-              />
-            )}
-          </Card>
-        )}
-
-        {/* TASKS */}
-
-        {page === "Tasks" && (
-          <Card theme={theme}>
-            <h2 style={{ marginTop: 0 }}>
-              Tasks & Follow-ups
-            </h2>
-
-            <p
-              style={mutedStyle(theme)}
-            >
-              Manage customer follow-ups
-              through communication
-              history.
-            </p>
-
-            <div
-              style={{
-                padding: 20,
-                border: `1px dashed ${theme.border}`,
-                borderRadius: 12,
-                marginTop: 20,
-              }}
-            >
-              <h3>
-                📅 Customer Follow-ups
-              </h3>
-
-              <p
-                style={mutedStyle(theme)}
-              >
-                Follow-up dates are stored
-                inside the Interaction
-                system.
-              </p>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setPage("Customers")
-                }
-                style={buttonStyle(
-                  theme,
-                  "#2563eb"
-                )}
-              >
-                Go to Customers
-              </button>
-            </div>
-          </Card>
-        )}
-
-        {/* REPORTS */}
-
-        {page === "Reports" && (
-          <Card theme={theme}>
-            <h2 style={{ marginTop: 0 }}>
-              Reports
-            </h2>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "repeat(auto-fit,minmax(200px,1fr))",
-                gap: 15,
-                marginTop: 20,
-              }}
-            >
-              <ReportBox
-                theme={theme}
-                title="Total Customers"
-                value={customers.length}
-              />
-
-              <ReportBox
-                theme={theme}
-                title="Total Deals"
-                value={deals.length}
-              />
-
-              <ReportBox
-                theme={theme}
-                title="Won Deals"
-                value={wonDeals}
-              />
-
-              <ReportBox
-                theme={theme}
-                title="Lost Deals"
-                value={lostDeals}
-              />
-
-              <ReportBox
-                theme={theme}
-                title="Active Deals"
-                value={activeDeals}
-              />
-
-              <ReportBox
-                theme={theme}
-                title="Pipeline Value"
-                value={`₹${pipelineValue.toLocaleString(
-                  "en-IN"
-                )}`}
-              />
-
-              <ReportBox
-                theme={theme}
-                title="Won Revenue"
-                value={`₹${totalRevenue.toLocaleString(
-                  "en-IN"
-                )}`}
-              />
-            </div>
-          </Card>
-        )}
-
-        {/* SETTINGS */}
-
-        {page === "Settings" && (
-          <Card theme={theme}>
-            <h2 style={{ marginTop: 0 }}>
-              Settings
-            </h2>
-
-            <div
-              style={{
-                marginTop: 20,
-                display: "grid",
-                gap: 15,
-              }}
-            >
-              <div
-                style={{
-                  padding: 18,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 12,
-                }}
-              >
-                <strong>
-                  👤 Account
-                </strong>
-
-                <div
-                  style={{
-                    marginTop: 8,
-                    color: theme.muted,
-                  }}
-                >
-                  Logged in as:{" "}
-                  <strong>
-                    {currentUser?.name ||
-                      "User"}
-                  </strong>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 18,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 12,
-                }}
-              >
-                <strong>
-                  🔌 API Server
-                </strong>
-
-                <div
-                  style={{
-                    marginTop: 6,
-                    color: theme.muted,
-                    wordBreak:
-                      "break-all",
-                  }}
-                >
-                  {API_URL}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 18,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 12,
-                }}
-              >
-                <strong>
-                  🎨 Theme
-                </strong>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDark(!dark)
-                    }
-                    style={buttonStyle(
-                      theme,
-                      "#2563eb"
-                    )}
-                  >
-                    {dark
-                      ? "☀️ Switch to Light"
-                      : "🌙 Switch to Dark"}
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 18,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 12,
-                }}
-              >
-                <strong>
-                  🔄 CRM Data
-                </strong>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={loadAll}
-                    style={buttonStyle(
-                      theme,
-                      "#16a34a"
-                    )}
-                  >
-                    🔄 Refresh CRM Data
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 18,
-                  border:
-                    "1px solid #fecaca",
-                  borderRadius: 12,
-                  background: dark
-                    ? "#450a0a"
-                    : "#fef2f2",
-                }}
-              >
-                <strong>
-                  🚪 Session
-                </strong>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={logout}
-                    style={buttonStyle(
-                      theme,
-                      "#dc2626"
-                    )}
-                  >
-                    Logout
-                  </button>
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
-      </main>
-
-      {/* CUSTOMER MODAL */}
-
-      {customerModal && (
-        <Modal
-          title={
-            editingCustomer
-              ? "Edit Customer"
-              : "Add Customer"
-          }
-          onClose={() =>
-            setCustomerModal(false)
-          }
-          theme={theme}
-        >
-          <form onSubmit={saveCustomer}>
-            <label style={labelStyle}>
-              Name *
-            </label>
-
-            <input
-              value={customerForm.name}
-              onChange={(e) =>
-                setCustomerForm({
-                  ...customerForm,
-                  name: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-              placeholder="Customer name"
-              required
-            />
-
-            <label style={labelStyle}>
-              Phone *
-            </label>
-
-            <input
-              value={customerForm.phone}
-              onChange={(e) =>
-                setCustomerForm({
-                  ...customerForm,
-                  phone: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-              placeholder="Phone number"
-              required
-            />
-
-            <label style={labelStyle}>
-              Email
-            </label>
-
-            <input
-              type="email"
-              value={customerForm.email}
-              onChange={(e) =>
-                setCustomerForm({
-                  ...customerForm,
-                  email: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-              placeholder="Email address"
-            />
-
-            <ModalButtons
-              onCancel={() =>
-                setCustomerModal(false)
-              }
-              submitText={
-                editingCustomer
-                  ? "Update Customer"
-                  : "Save Customer"
-              }
-            />
-          </form>
-        </Modal>
-      )}
-
-      {/* DEAL MODAL */}
-
-      {dealModal && (
-        <Modal
-          title={
-            editingDeal
-              ? "Edit Deal"
-              : "Add Deal"
-          }
-          onClose={() =>
-            setDealModal(false)
-          }
-          theme={theme}
-        >
-          <form onSubmit={saveDeal}>
-            <label style={labelStyle}>
-              Deal Title *
-            </label>
-
-            <input
-              value={dealForm.title}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  title: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-              placeholder="Deal title"
-              required
-            />
-
-            <label style={labelStyle}>
-              Customer
-            </label>
-
-            <select
-              value={dealForm.customer}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  customer: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            >
-              <option value="">
-                Select customer
-              </option>
-
-              {customers.map(
-                (customer) => (
-                  <option
-                    key={customer._id}
-                    value={customer._id}
-                  >
-                    {customer.name}
-                  </option>
-                )
-              )}
-            </select>
-
-            <label style={labelStyle}>
-              Company
-            </label>
-
-            <input
-              value={dealForm.company}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  company: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-              placeholder="Company name"
-            />
-
-            <label style={labelStyle}>
-              Amount
-            </label>
-
-            <input
-              type="number"
-              min="0"
-              value={dealForm.amount}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  amount: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-              placeholder="Amount"
-            />
-
-            <label style={labelStyle}>
-              Status
-            </label>
-
-            <select
-              value={dealForm.status}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  status: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            >
-              <option>New</option>
-              <option>In Progress</option>
-              <option>Won</option>
-              <option>Lost</option>
-            </select>
-
-            <label style={labelStyle}>
-              Stage
-            </label>
-
-            <select
-              value={dealForm.stage}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  stage: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            >
-              <option>Lead</option>
-              <option>Qualified</option>
-              <option>Proposal</option>
-              <option>Negotiation</option>
-              <option>Closed Won</option>
-              <option>Closed Lost</option>
-            </select>
-
-            <label style={labelStyle}>
-              Priority
-            </label>
-
-            <select
-              value={dealForm.priority}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  priority: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            >
-              <option>Low</option>
-              <option>Medium</option>
-              <option>High</option>
-              <option>Urgent</option>
-            </select>
-
-            <label style={labelStyle}>
-              Probability %
-            </label>
-
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={dealForm.probability}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  probability: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            />
-
-            <label style={labelStyle}>
-              Closing Date
-            </label>
-
-            <input
-              type="date"
-              value={dealForm.closingDate}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  closingDate: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            />
-
-            <label style={labelStyle}>
-              Description
-            </label>
-
-            <textarea
-              value={dealForm.description}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  description: e.target.value,
-                })
-              }
-              style={{
-                ...inputStyle(theme),
-                minHeight: 70,
-              }}
-              placeholder="Deal description"
-            />
-
-            <label style={labelStyle}>
-              Notes
-            </label>
-
-            <textarea
-              value={dealForm.notes}
-              onChange={(e) =>
-                setDealForm({
-                  ...dealForm,
-                  notes: e.target.value,
-                })
-              }
-              style={{
-                ...inputStyle(theme),
-                minHeight: 90,
-              }}
-              placeholder="Deal notes"
-            />
-
-            <ModalButtons
-              onCancel={() =>
-                setDealModal(false)
-              }
-              submitText={
-                editingDeal
-                  ? "Update Deal"
-                  : "Save Deal"
-              }
-            />
-          </form>
-        </Modal>
-      )}
-
-      {/* COMMUNICATION PANEL */}
-
-      {communicationOpen &&
-        communicationCustomer && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background:
-                "rgba(0,0,0,0.55)",
-              zIndex: 1000,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 20,
-              boxSizing: "border-box",
-            }}
-          >
-            <div
-              style={{
-                width: "min(900px,100%)",
-                maxHeight: "90vh",
-                overflowY: "auto",
-                background: theme.card,
-                color: theme.text,
-                borderRadius: 18,
-                padding: 24,
-                boxSizing: "border-box",
-                boxShadow:
-                  "0 25px 70px rgba(0,0,0,0.35)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent:
-                    "space-between",
-                  alignItems: "center",
-                  gap: 15,
-                  marginBottom: 20,
-                }}
-              >
-                <div>
-                  <h2
-                    style={{ margin: 0 }}
-                  >
-                    Communication
-                  </h2>
-
-                  <div
-                    style={{
-                      color: theme.muted,
-                      marginTop: 5,
-                    }}
-                  >
-                    {communicationCustomer.name}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={
-                    closeCommunication
-                  }
-                  style={closeButton}
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit,minmax(130px,1fr))",
-                  gap: 10,
-                  marginBottom: 25,
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    openCall(
-                      communicationCustomer
-                    )
-                  }
-                  style={commButton(
-                    "#2563eb"
-                  )}
-                >
-                  📞 Call
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    openWhatsApp(
-                      communicationCustomer
-                    )
-                  }
-                  style={commButton(
-                    "#16a34a"
-                  )}
-                >
-                  💬 WhatsApp
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    openEmail(
-                      communicationCustomer
-                    )
-                  }
-                  style={commButton(
-                    "#7c3aed"
-                  )}
-                >
-                  📧 Email
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    openAddInteraction(
-                      "Call"
-                    )
-                  }
-                  style={{
-                    ...commButton(
-                      "#f97316"
-                    ),
-                    fontWeight: 800,
-                  }}
-                >
-                  📝 + Add Interaction
-                </button>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent:
-                    "space-between",
-                  alignItems: "center",
-                  marginBottom: 12,
-                  gap: 10,
-                }}
-              >
-                <h3 style={{ margin: 0 }}>
-                  Communication History
-                </h3>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    loadInteractions(
-                      communicationCustomer._id
-                    )
-                  }
-                  style={{
-                    padding:
-                      "8px 12px",
-                    borderRadius: 8,
-                    border: `1px solid ${theme.border}`,
-                    background:
-                      theme.card,
-                    color: theme.text,
-                    cursor: "pointer",
-                  }}
-                >
-                  🔄 Refresh
-                </button>
-              </div>
-
-              {interactionLoading ? (
-                <Loading />
-              ) : interactions.length ===
-                0 ? (
-                <div
-                  style={{
-                    padding: 30,
-                    textAlign: "center",
-                    border: `1px dashed ${theme.border}`,
-                    borderRadius: 12,
-                    color: theme.muted,
-                  }}
-                >
-                  No communication
-                  history yet.
-
-                  <br />
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openAddInteraction(
-                        "Note"
-                      )
-                    }
-                    style={{
-                      marginTop: 12,
-                      padding:
-                        "10px 16px",
-                      border: "none",
-                      borderRadius: 8,
-                      background:
-                        "#f97316",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    📝 Add First
-                    Interaction
-                  </button>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 12,
-                  }}
-                >
-                  {interactions.map(
-                    (interaction) => (
-                      <div
-                        key={
-                          interaction._id
-                        }
-                        style={{
-                          border: `1px solid ${theme.border}`,
-                          borderRadius: 12,
-                          padding: 15,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent:
-                              "space-between",
-                            gap: 10,
-                          }}
-                        >
-                          <div>
-                            <div
-                              style={{
-                                fontWeight: 800,
-                              }}
-                            >
-                              {interactionIcon(
-                                interaction.type
-                              )}{" "}
-                              {
-                                interaction.type
-                              }
-                            </div>
-
-                            {interaction.subject && (
-                              <div
-                                style={{
-                                  marginTop: 5,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {
-                                  interaction.subject
-                                }
-                              </div>
-                            )}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              deleteInteraction(
-                                interaction._id
-                              )
-                            }
-                            style={{
-                              border: "none",
-                              background:
-                                "transparent",
-                              color:
-                                "#dc2626",
-                              cursor:
-                                "pointer",
-                              fontWeight: 700,
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-
-                        <p
-                          style={{
-                            whiteSpace:
-                              "pre-wrap",
-                            marginBottom: 8,
-                          }}
-                        >
-                          {interaction.notes ||
-                            "No notes"}
-                        </p>
-
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color:
-                              theme.muted,
-                          }}
-                        >
-                          {interaction.createdAt
-                            ? new Date(
-                                interaction.createdAt
-                              ).toLocaleString()
-                            : ""}
-                        </div>
-
-                        {interaction.followUpDate && (
-                          <div
-                            style={{
-                              marginTop: 7,
-                              fontSize: 13,
-                              fontWeight: 600,
-                            }}
-                          >
-                            📅 Follow-up:{" "}
-                            {new Date(
-                              interaction.followUpDate
-                            ).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-      {/* INTERACTION MODAL */}
-
-      {interactionModal && (
-        <Modal
-          title="Add Interaction"
-          onClose={() =>
-            setInteractionModal(false)
-          }
-          theme={theme}
-          zIndex={2000}
-        >
-          <form onSubmit={saveInteraction}>
-            <div
-              style={{
-                background: "#fff7ed",
-                color: "#9a3412",
-                padding: 12,
-                borderRadius: 9,
-                marginBottom: 15,
-                fontWeight: 600,
-              }}
-            >
-              Customer:{" "}
-              {
-                selectedCustomerForInteraction?.name
-              }
-            </div>
-
-            <label style={labelStyle}>
-              Interaction Type *
-            </label>
-
-            <select
-              value={interactionForm.type}
-              onChange={(e) =>
-                setInteractionForm({
-                  ...interactionForm,
-                  type: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            >
-              <option>Call</option>
-              <option>WhatsApp</option>
-              <option>Email</option>
-              <option>Note</option>
-            </select>
-
-            <label style={labelStyle}>
-              Subject
-            </label>
-
-            <input
-              value={interactionForm.subject}
-              onChange={(e) =>
-                setInteractionForm({
-                  ...interactionForm,
-                  subject: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-              placeholder="Subject"
-            />
-
-            <label style={labelStyle}>
-              Notes *
-            </label>
-
-            <textarea
-              required
-              value={interactionForm.notes}
-              onChange={(e) =>
-                setInteractionForm({
-                  ...interactionForm,
-                  notes: e.target.value,
-                })
-              }
-              style={{
-                ...inputStyle(theme),
-                minHeight: 120,
-              }}
-              placeholder="Write communication details..."
-            />
-
-            <label style={labelStyle}>
-              Follow-up Date
-            </label>
-
-            <input
-              type="datetime-local"
-              value={
-                interactionForm.followUpDate
-              }
-              onChange={(e) =>
-                setInteractionForm({
-                  ...interactionForm,
-                  followUpDate:
-                    e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            />
-
-            <label style={labelStyle}>
-              Created By
-            </label>
-
-            <input
-              value={
-                interactionForm.createdBy
-              }
-              onChange={(e) =>
-                setInteractionForm({
-                  ...interactionForm,
-                  createdBy: e.target.value,
-                })
-              }
-              style={inputStyle(theme)}
-            />
-
-            <ModalButtons
-              onCancel={() =>
-                setInteractionModal(false)
-              }
-              submitText="Save Interaction"
-            />
-          </form>
-        </Modal>
-      )}
-    </div>
-  );
+  return data;
 }
 
-/* AUTH SCREEN */
-
-function AuthScreen({
-  mode,
-  setMode,
-  form,
-  setForm,
-  loading,
-  error,
-  onSubmit,
-}) {
-  const isLogin = mode === "login";
-
+function Modal({ title, onClose, children, width = 560 }) {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        boxSizing: "border-box",
-        background:
-          "linear-gradient(135deg,#0f172a,#1e3a8a,#2563eb)",
-        fontFamily:
-          "Inter, Arial, Helvetica, sans-serif",
-      }}
-    >
+    <div style={styles.overlay}>
       <div
         style={{
-          width: "min(430px,100%)",
-          background: "#ffffff",
-          borderRadius: 24,
-          padding: 30,
-          boxSizing: "border-box",
-          boxShadow:
-            "0 25px 80px rgba(0,0,0,0.3)",
+          ...styles.modal,
+          maxWidth: width,
         }}
       >
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: 25,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 48,
-              marginBottom: 8,
-            }}
-          >
-            🚀
-          </div>
-
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 30,
-              color: "#0f172a",
-            }}
-          >
-            CRM Pro
-          </h1>
-
-          <p
-            style={{
-              color: "#64748b",
-              marginTop: 8,
-            }}
-          >
-            {isLogin
-              ? "Login to your CRM"
-              : "Create your CRM account"}
-          </p>
-        </div>
-
-        {error && (
-          <div
-            style={{
-              background: "#fee2e2",
-              color: "#991b1b",
-              border:
-                "1px solid #fecaca",
-              padding: 12,
-              borderRadius: 9,
-              marginBottom: 15,
-              fontSize: 14,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={onSubmit}>
-          <label
-            style={{
-              display: "block",
-              marginBottom: 7,
-              fontWeight: 700,
-              color: "#334155",
-            }}
-          >
-            ID
-          </label>
-
-          <input
-            value={form.name}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                name: e.target.value,
-              })
-            }
-            placeholder="Enter your ID"
-            autoComplete="username"
-            minLength={3}
-            maxLength={30}
-            required
-            style={authInputStyle}
-          />
-
-          <label
-            style={{
-              display: "block",
-              marginTop: 15,
-              marginBottom: 7,
-              fontWeight: 700,
-              color: "#334155",
-            }}
-          >
-            Password
-          </label>
-
-          <input
-            type="password"
-            value={form.password}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                password: e.target.value,
-              })
-            }
-            placeholder="Enter your password"
-            autoComplete={
-              isLogin
-                ? "current-password"
-                : "new-password"
-            }
-            minLength={6}
-            required
-            style={authInputStyle}
-          />
-
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: "100%",
-              marginTop: 22,
-              padding: 14,
-              border: "none",
-              borderRadius: 10,
-              background: loading
-                ? "#94a3b8"
-                : "#2563eb",
-              color: "#fff",
-              cursor: loading
-                ? "not-allowed"
-                : "pointer",
-              fontSize: 16,
-              fontWeight: 800,
-            }}
-          >
-            {loading
-              ? "Please wait..."
-              : isLogin
-              ? "🔐 Login"
-              : "🚀 Create Account"}
-          </button>
-        </form>
-
-        <div
-          style={{
-            textAlign: "center",
-            marginTop: 22,
-            color: "#64748b",
-            fontSize: 14,
-          }}
-        >
-          {isLogin
-            ? "Don't have an account?"
-            : "Already have an account?"}
-
-          <button
-            type="button"
-            onClick={() => {
-              setMode(
-                isLogin ? "signup" : "login"
-              );
-            }}
-            style={{
-              marginLeft: 6,
-              border: "none",
-              background: "transparent",
-              color: "#2563eb",
-              cursor: "pointer",
-              fontWeight: 800,
-            }}
-          >
-            {isLogin
-              ? "Create Account"
-              : "Login"}
-          </button>
-        </div>
-
-        <div
-          style={{
-            marginTop: 22,
-            padding: 12,
-            borderRadius: 10,
-            background: "#f1f5f9",
-            color: "#64748b",
-            fontSize: 12,
-            textAlign: "center",
-          }}
-        >
-          🔒 Your password is securely
-          handled by the CRM backend.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* COMPONENTS */
-
-function Card({ children, theme }) {
-  return (
-    <div
-      style={{
-        background: theme.card,
-        border: `1px solid ${theme.border}`,
-        borderRadius: 16,
-        padding: 22,
-        boxShadow:
-          "0 4px 15px rgba(0,0,0,0.05)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function StatCard({
-  theme,
-  title,
-  value,
-  icon,
-}) {
-  return (
-    <div
-      style={{
-        background: theme.card,
-        border: `1px solid ${theme.border}`,
-        borderRadius: 15,
-        padding: 20,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 28,
-          marginBottom: 12,
-        }}
-      >
-        {icon}
-      </div>
-
-      <div
-        style={{
-          color: theme.muted,
-          fontSize: 14,
-        }}
-      >
-        {title}
-      </div>
-
-      <div
-        style={{
-          fontSize: 25,
-          fontWeight: 800,
-          marginTop: 5,
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function ReportBox({
-  theme,
-  title,
-  value,
-}) {
-  return (
-    <div
-      style={{
-        padding: 20,
-        border: `1px solid ${theme.border}`,
-        borderRadius: 12,
-        background: theme.bg,
-      }}
-    >
-      <div
-        style={{
-          color: theme.muted,
-          fontSize: 14,
-        }}
-      >
-        {title}
-      </div>
-
-      <div
-        style={{
-          fontSize: 26,
-          fontWeight: 800,
-          marginTop: 8,
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SimpleTable({
-  theme,
-  headers,
-  rows,
-}) {
-  return (
-    <div
-      style={{
-        overflowX: "auto",
-        marginTop: 20,
-      }}
-    >
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          minWidth: 650,
-        }}
-      >
-        <thead>
-          <tr>
-            {headers.map((header) => (
-              <th
-                key={header}
-                style={{
-                  textAlign: "left",
-                  padding: 12,
-                  borderBottom: `2px solid ${theme.border}`,
-                  color: theme.muted,
-                  fontSize: 13,
-                  whiteSpace:
-                    "nowrap",
-                }}
-              >
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={index}>
-              {row.map(
-                (cell, cellIndex) => (
-                  <td
-                    key={cellIndex}
-                    style={{
-                      padding: 12,
-                      borderBottom: `1px solid ${theme.border}`,
-                      verticalAlign:
-                        "middle",
-                    }}
-                  >
-                    {cell}
-                  </td>
-                )
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function SmallButton({
-  text,
-  onClick,
-  danger = false,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: "7px 10px",
-        borderRadius: 7,
-        border:
-          "1px solid #cbd5e1",
-        background: danger
-          ? "#fee2e2"
-          : "#f8fafc",
-        color: danger
-          ? "#b91c1c"
-          : "#334155",
-        cursor: "pointer",
-        fontSize: 12,
-        fontWeight: 600,
-      }}
-    >
-      {text}
-    </button>
-  );
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
-  theme,
-  zIndex = 1500,
-}) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex,
-        background:
-          "rgba(0,0,0,0.6)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          width: "min(600px,100%)",
-          maxHeight: "90vh",
-          overflowY: "auto",
-          background: theme.card,
-          color: theme.text,
-          borderRadius: 16,
-          padding: 24,
-          boxSizing: "border-box",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent:
-              "space-between",
-            alignItems: "center",
-            marginBottom: 20,
-          }}
-        >
-          <h2 style={{ margin: 0 }}>
-            {title}
-          </h2>
+        <div style={styles.modalHeader}>
+          <h2 style={styles.modalTitle}>{title}</h2>
 
           <button
             type="button"
             onClick={onClose}
-            style={closeButton}
+            style={styles.closeButton}
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -2834,159 +129,3652 @@ function Modal({
   );
 }
 
-function ModalButtons({
-  onCancel,
-  submitText,
+function StatusBadge({ status }) {
+  let background = "#eef2ff";
+  let color = "#4338ca";
+
+  if (
+    status === "Won" ||
+    status === "Converted"
+  ) {
+    background = "#dcfce7";
+    color = "#166534";
+  }
+
+  if (
+    status === "Lost" ||
+    status === "Closed"
+  ) {
+    background = "#fee2e2";
+    color = "#991b1b";
+  }
+
+  if (status === "Contacted") {
+    background = "#fef3c7";
+    color = "#92400e";
+  }
+
+  return (
+    <span
+      style={{
+        ...styles.badge,
+        background,
+        color,
+      }}
+    >
+      {status || "—"}
+    </span>
+  );
+}
+
+function AuthScreen({
+  authMode,
+  setAuthMode,
+  authForm,
+  setAuthForm,
+  handleAuth,
+  authLoading,
+  authError,
+}) {
+  const isLogin = authMode === "login";
+
+  return (
+    <div style={styles.authPage}>
+      <div style={styles.authCard}>
+        <div style={styles.authLogo}>🚀</div>
+
+        <h1 style={styles.authTitle}>CRM Pro</h1>
+
+        <p style={styles.authSubtitle}>
+          {isLogin
+            ? "Login to your CRM"
+            : "Create your CRM account"}
+        </p>
+
+        {authError && (
+          <div style={styles.errorBox}>
+            {authError}
+          </div>
+        )}
+
+        <form onSubmit={handleAuth}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>
+              ID
+            </label>
+
+            <input
+              type="text"
+              required
+              minLength={3}
+              maxLength={30}
+              autoComplete="username"
+              placeholder="Enter your ID"
+              value={authForm.name}
+              onChange={(e) =>
+                setAuthForm({
+                  ...authForm,
+                  name: e.target.value,
+                })
+              }
+              style={styles.input}
+            />
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.label}>
+              Password
+            </label>
+
+            <input
+              type="password"
+              required
+              minLength={6}
+              autoComplete={
+                isLogin
+                  ? "current-password"
+                  : "new-password"
+              }
+              placeholder="Enter your password"
+              value={authForm.password}
+              onChange={(e) =>
+                setAuthForm({
+                  ...authForm,
+                  password: e.target.value,
+                })
+              }
+              style={styles.input}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={authLoading}
+            style={{
+              ...styles.primaryButton,
+              width: "100%",
+              opacity: authLoading ? 0.7 : 1,
+            }}
+          >
+            {authLoading
+              ? "Please wait..."
+              : isLogin
+              ? "Login"
+              : "Create Account"}
+          </button>
+        </form>
+
+        <div style={styles.authSwitch}>
+          {isLogin
+            ? "Don't have an account?"
+            : "Already have an account?"}
+
+          <button
+            type="button"
+            onClick={() => {
+              setAuthMode(
+                isLogin ? "signup" : "login"
+              );
+              setAuthForm({
+                name: "",
+                password: "",
+              });
+            }}
+            style={styles.linkButton}
+          >
+            {isLogin ? " Sign Up" : " Login"}
+          </button>
+        </div>
+
+        <p style={styles.authNote}>
+          Login uses ID and password only.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [token, setToken] = useState(
+    () => localStorage.getItem(TOKEN_KEY) || ""
+  );
+
+  const [currentUser, setCurrentUser] = useState(
+    () => {
+      try {
+        return JSON.parse(
+          localStorage.getItem(USER_KEY) || "null"
+        );
+      } catch {
+        return null;
+      }
+    }
+  );
+
+  const [authMode, setAuthMode] = useState("login");
+
+  const [authForm, setAuthForm] = useState({
+    name: "",
+    password: "",
+  });
+
+  const [authLoading, setAuthLoading] =
+    useState(false);
+
+  const [authError, setAuthError] = useState("");
+
+  const [darkMode, setDarkMode] = useState(
+    () =>
+      localStorage.getItem(THEME_KEY) === "true"
+  );
+
+  const [page, setPage] = useState("Dashboard");
+
+  const [customers, setCustomers] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [deals, setDeals] = useState([]);
+  const [interactions, setInteractions] =
+    useState([]);
+
+  const [loading, setLoading] = useState(false);
+  const [leadLoading, setLeadLoading] =
+    useState(false);
+
+  const [error, setError] = useState("");
+
+  const [customerSearch, setCustomerSearch] =
+    useState("");
+  const [leadSearch, setLeadSearch] = useState("");
+  const [dealSearch, setDealSearch] = useState("");
+
+  const [showCustomerModal, setShowCustomerModal] =
+    useState(false);
+
+  const [showLeadModal, setShowLeadModal] =
+    useState(false);
+
+  const [showDealModal, setShowDealModal] =
+    useState(false);
+
+  const [
+    showInteractionModal,
+    setShowInteractionModal,
+  ] = useState(false);
+
+  const [editingCustomer, setEditingCustomer] =
+    useState(null);
+
+  const [editingLead, setEditingLead] =
+    useState(null);
+
+  const [editingDeal, setEditingDeal] =
+    useState(null);
+
+  const [customerForm, setCustomerForm] =
+    useState(emptyCustomer);
+
+  const [leadForm, setLeadForm] =
+    useState(emptyLead);
+
+  const [dealForm, setDealForm] =
+    useState(emptyDeal);
+
+  const [
+    interactionForm,
+    setInteractionForm,
+  ] = useState(emptyInteraction);
+
+  const [savingCustomer, setSavingCustomer] =
+    useState(false);
+
+  const [savingLead, setSavingLead] =
+    useState(false);
+
+  const [savingDeal, setSavingDeal] =
+    useState(false);
+
+  const [
+    savingInteraction,
+    setSavingInteraction,
+  ] = useState(false);
+
+  const [showCommunicationModal, setShowCommunicationModal] =
+    useState(false);
+
+  const [communicationCustomer, setCommunicationCustomer] =
+    useState(null);
+
+  const [communicationType, setCommunicationType] =
+    useState("WhatsApp");
+
+  useEffect(() => {
+    localStorage.setItem(
+      THEME_KEY,
+      String(darkMode)
+    );
+  }, [darkMode]);
+
+  useEffect(() => {
+    if (token) {
+      loadAll();
+    }
+  }, [token]);
+
+  async function loadAll() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [customerData, dealData, leadData] =
+        await Promise.all([
+          api("/customers", {}, token),
+          api("/deals", {}, token),
+          api("/leads", {}, token),
+        ]);
+
+      setCustomers(
+        getArray(customerData, "customers")
+      );
+
+      setDeals(
+        getArray(dealData, "deals")
+      );
+
+      setLeads(
+        getArray(leadData, "leads")
+      );
+
+      try {
+        const interactionData = await api(
+          "/interactions",
+          {},
+          token
+        );
+
+        setInteractions(
+          getArray(
+            interactionData,
+            "interactions"
+          )
+        );
+      } catch {
+        setInteractions([]);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAuth(e) {
+    e.preventDefault();
+
+    setAuthLoading(true);
+    setAuthError("");
+
+    try {
+      const endpoint =
+        authMode === "login"
+          ? "/auth/login"
+          : "/auth/register";
+
+      /*
+        IMPORTANT:
+        Backend authController expects:
+        {
+          name,
+          password
+        }
+
+        So frontend also sends ID as "name".
+      */
+
+      const body = {
+        name: authForm.name.trim(),
+        password: authForm.password,
+      };
+
+      const data = await api(endpoint, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+
+      const receivedToken =
+        data.token || data.accessToken;
+
+      if (!receivedToken) {
+        throw new Error(
+          "Authentication token not received"
+        );
+      }
+
+      const user =
+        data.user || {
+          id: "",
+          name: authForm.name.trim(),
+        };
+
+      localStorage.setItem(
+        TOKEN_KEY,
+        receivedToken
+      );
+
+      localStorage.setItem(
+        USER_KEY,
+        JSON.stringify(user)
+      );
+
+      setToken(receivedToken);
+      setCurrentUser(user);
+
+      setAuthForm({
+        name: "",
+        password: "",
+      });
+    } catch (err) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+
+    setToken("");
+    setCurrentUser(null);
+
+    setCustomers([]);
+    setLeads([]);
+    setDeals([]);
+    setInteractions([]);
+
+    setPage("Dashboard");
+    setAuthMode("login");
+    setAuthError("");
+  }
+
+  function openAddCustomer() {
+    setEditingCustomer(null);
+    setCustomerForm({
+      ...emptyCustomer,
+    });
+    setShowCustomerModal(true);
+  }
+
+  function openEditCustomer(customer) {
+    setEditingCustomer(customer);
+
+    setCustomerForm({
+      name: customer.name || "",
+      email: customer.email || "",
+      phone: customer.phone || "",
+      company: customer.company || "",
+    });
+
+    setShowCustomerModal(true);
+  }
+
+  async function saveCustomer(e) {
+    e.preventDefault();
+
+    setSavingCustomer(true);
+    setError("");
+
+    try {
+      const payload = {
+        name: customerForm.name.trim(),
+        email: customerForm.email.trim(),
+        phone: customerForm.phone.trim(),
+        company: customerForm.company.trim(),
+      };
+
+      if (!payload.name || !payload.phone) {
+        throw new Error(
+          "Name and phone are required"
+        );
+      }
+
+      if (editingCustomer) {
+        await api(
+          `/customers/${editingCustomer._id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      } else {
+        await api(
+          "/customers",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      }
+
+      setShowCustomerModal(false);
+      setEditingCustomer(null);
+      setCustomerForm({
+        ...emptyCustomer,
+      });
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingCustomer(false);
+    }
+  }
+
+  async function deleteCustomer(id) {
+    if (
+      !window.confirm(
+        "Delete this customer?"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api(
+        `/customers/${id}`,
+        {
+          method: "DELETE",
+        },
+        token
+      );
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  function openAddLead() {
+    setEditingLead(null);
+    setLeadForm({
+      ...emptyLead,
+    });
+    setShowLeadModal(true);
+  }
+
+  function openEditLead(lead) {
+    setEditingLead(lead);
+
+    setLeadForm({
+      name: lead.name || "",
+      phone: lead.phone || "",
+      email: lead.email || "",
+      message: lead.message || "",
+      platform: lead.platform || "Other",
+      externalLeadId:
+        lead.externalLeadId || "",
+      status: lead.status || "New",
+    });
+
+    setShowLeadModal(true);
+  }
+
+  async function saveLead(e) {
+    e.preventDefault();
+
+    setSavingLead(true);
+    setError("");
+
+    try {
+      const payload = {
+        name: leadForm.name.trim(),
+        phone: leadForm.phone.trim(),
+        email: leadForm.email.trim(),
+        message: leadForm.message.trim(),
+        platform: leadForm.platform,
+        externalLeadId:
+          leadForm.externalLeadId.trim(),
+        status: leadForm.status,
+      };
+
+      if (!payload.name || !payload.phone) {
+        throw new Error(
+          "Lead name and phone are required"
+        );
+      }
+
+      if (editingLead) {
+        await api(
+          `/leads/${editingLead._id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      } else {
+        await api(
+          "/leads",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      }
+
+      setShowLeadModal(false);
+      setEditingLead(null);
+      setLeadForm({
+        ...emptyLead,
+      });
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingLead(false);
+    }
+  }
+
+  async function deleteLead(id) {
+    if (
+      !window.confirm(
+        "Delete this lead?"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api(
+        `/leads/${id}`,
+        {
+          method: "DELETE",
+        },
+        token
+      );
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function convertLead(lead) {
+    if (lead.convertedToCustomer) {
+      return;
+    }
+
+    if (
+      !window.confirm(
+        "Convert this lead into a customer?"
+      )
+    ) {
+      return;
+    }
+
+    setLeadLoading(true);
+
+    try {
+      await api(
+        `/leads/${lead._id}/convert`,
+        {
+          method: "POST",
+        },
+        token
+      );
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLeadLoading(false);
+    }
+  }
+
+  function openAddDeal() {
+    setEditingDeal(null);
+
+    setDealForm({
+      ...emptyDeal,
+    });
+
+    setShowDealModal(true);
+  }
+
+  function openEditDeal(deal) {
+    setEditingDeal(deal);
+
+    setDealForm({
+      title: deal.title || "",
+      customerId:
+        deal.customerId?._id ||
+        deal.customerId ||
+        "",
+      amount:
+        deal.amount !== undefined
+          ? String(deal.amount)
+          : "",
+      status: deal.status || "Open",
+      notes: deal.notes || "",
+    });
+
+    setShowDealModal(true);
+  }
+
+  async function saveDeal(e) {
+    e.preventDefault();
+
+    setSavingDeal(true);
+    setError("");
+
+    try {
+      const payload = {
+        title: dealForm.title.trim(),
+        customerId:
+          dealForm.customerId || null,
+        amount:
+          Number(dealForm.amount) || 0,
+        status: dealForm.status,
+        notes: dealForm.notes.trim(),
+      };
+
+      if (!payload.title) {
+        throw new Error(
+          "Deal title is required"
+        );
+      }
+
+      if (editingDeal) {
+        await api(
+          `/deals/${editingDeal._id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      } else {
+        await api(
+          "/deals",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      }
+
+      setShowDealModal(false);
+      setEditingDeal(null);
+
+      setDealForm({
+        ...emptyDeal,
+      });
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingDeal(false);
+    }
+  }
+
+  async function deleteDeal(id) {
+    if (
+      !window.confirm(
+        "Delete this deal?"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api(
+        `/deals/${id}`,
+        {
+          method: "DELETE",
+        },
+        token
+      );
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function saveInteraction(e) {
+    e.preventDefault();
+
+    setSavingInteraction(true);
+    setError("");
+
+    try {
+      if (!interactionForm.customerId) {
+        throw new Error(
+          "Please select a customer"
+        );
+      }
+
+      if (!interactionForm.message.trim()) {
+        throw new Error(
+          "Please enter a message"
+        );
+      }
+
+      await api(
+        "/interactions",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            customerId:
+              interactionForm.customerId,
+            type: interactionForm.type,
+            message:
+              interactionForm.message.trim(),
+          }),
+        },
+        token
+      );
+
+      setShowInteractionModal(false);
+
+      setInteractionForm({
+        ...emptyInteraction,
+      });
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingInteraction(false);
+    }
+  }
+
+  function openCommunication(customer) {
+    setCommunicationCustomer(customer);
+    setCommunicationType("WhatsApp");
+    setShowCommunicationModal(true);
+  }
+
+  function startCommunication() {
+    if (!communicationCustomer) {
+      return;
+    }
+
+    const phone =
+      communicationCustomer.phone?.replace(
+        /\D/g,
+        ""
+      ) || "";
+
+    if (!phone) {
+      alert("Customer phone number is missing.");
+      return;
+    }
+
+    let url = "";
+
+    if (communicationType === "WhatsApp") {
+      url = `https://wa.me/${phone}`;
+    } else if (communicationType === "Call") {
+      url = `tel:${phone}`;
+    } else if (communicationType === "SMS") {
+      url = `sms:${phone}`;
+    }
+
+    if (url) {
+      window.open(url, "_blank");
+    }
+
+    setShowCommunicationModal(false);
+  }
+
+  const filteredCustomers = useMemo(() => {
+    const q =
+      customerSearch.trim().toLowerCase();
+
+    if (!q) return customers;
+
+    return customers.filter((customer) =>
+      [
+        customer.name,
+        customer.email,
+        customer.phone,
+        customer.company,
+      ]
+        .filter(Boolean)
+        .some((value) =>
+          String(value)
+            .toLowerCase()
+            .includes(q)
+        )
+    );
+  }, [customers, customerSearch]);
+
+  const filteredLeads = useMemo(() => {
+    const q =
+      leadSearch.trim().toLowerCase();
+
+    if (!q) return leads;
+
+    return leads.filter((lead) =>
+      [
+        lead.name,
+        lead.phone,
+        lead.email,
+        lead.platform,
+        lead.status,
+        lead.message,
+      ]
+        .filter(Boolean)
+        .some((value) =>
+          String(value)
+            .toLowerCase()
+            .includes(q)
+        )
+    );
+  }, [leads, leadSearch]);
+
+  const filteredDeals = useMemo(() => {
+    const q =
+      dealSearch.trim().toLowerCase();
+
+    if (!q) return deals;
+
+    return deals.filter((deal) =>
+      [
+        deal.title,
+        deal.status,
+        deal.notes,
+      ]
+        .filter(Boolean)
+        .some((value) =>
+          String(value)
+            .toLowerCase()
+            .includes(q)
+        )
+    );
+  }, [deals, dealSearch]);
+
+  const revenue = useMemo(
+    () =>
+      deals
+        .filter((deal) => deal.status === "Won")
+        .reduce(
+          (total, deal) =>
+            total +
+            (Number(deal.amount) || 0),
+          0
+        ),
+    [deals]
+  );
+
+  const newLeads = leads.filter(
+    (lead) => lead.status === "New"
+  ).length;
+
+  const convertedLeads = leads.filter(
+    (lead) =>
+      lead.status === "Converted" ||
+      lead.convertedToCustomer
+  ).length;
+
+  const openDeals = deals.filter(
+    (deal) => deal.status === "Open"
+  ).length;
+
+  if (!token) {
+    return (
+      <AuthScreen
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        authForm={authForm}
+        setAuthForm={setAuthForm}
+        handleAuth={handleAuth}
+        authLoading={authLoading}
+        authError={authError}
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{
+        ...styles.app,
+        background: darkMode
+          ? "#0f172a"
+          : "#f8fafc",
+        color: darkMode
+          ? "#f8fafc"
+          : "#0f172a",
+      }}
+    >
+      <aside
+        style={{
+          ...styles.sidebar,
+          background: darkMode
+            ? "#111827"
+            : "#ffffff",
+          borderColor: darkMode
+            ? "#1f2937"
+            : "#e5e7eb",
+        }}
+      >
+        <div style={styles.logo}>
+          🚀 CRM Pro
+        </div>
+
+        <nav style={styles.nav}>
+          {[
+            ["Dashboard", "🏠"],
+            ["Customers", "👥"],
+            ["Leads", "🎯"],
+            ["Deals", "💼"],
+            ["Tasks", "✅"],
+            ["Reports", "📊"],
+            ["Settings", "⚙️"],
+          ].map(([name, icon]) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => setPage(name)}
+              style={{
+                ...styles.navButton,
+                background:
+                  page === name
+                    ? darkMode
+                      ? "#1e293b"
+                      : "#eef2ff"
+                    : "transparent",
+                color:
+                  page === name
+                    ? "#4f46e5"
+                    : darkMode
+                    ? "#cbd5e1"
+                    : "#475569",
+              }}
+            >
+              <span>{icon}</span>
+              <span>{name}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div style={styles.sidebarBottom}>
+          <div
+            style={{
+              ...styles.userMini,
+              background: darkMode
+                ? "#1e293b"
+                : "#f8fafc",
+            }}
+          >
+            <div style={styles.avatar}>
+              {(currentUser?.name || "U")
+                .charAt(0)
+                .toUpperCase()}
+            </div>
+
+            <div style={{ minWidth: 0 }}>
+              <strong
+                style={{
+                  display: "block",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {currentUser?.name || "User"}
+              </strong>
+
+              <small
+                style={{
+                  color: darkMode
+                    ? "#94a3b8"
+                    : "#64748b",
+                }}
+              >
+                CRM Account
+              </small>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={logout}
+            style={styles.logoutButton}
+          >
+            🚪 Logout
+          </button>
+        </div>
+      </aside>
+
+      <main style={styles.main}>
+        <header
+          style={{
+            ...styles.topbar,
+            background: darkMode
+              ? "#111827"
+              : "#ffffff",
+            borderColor: darkMode
+              ? "#1f2937"
+              : "#e5e7eb",
+          }}
+        >
+          <div>
+            <h1 style={styles.pageTitle}>
+              {page}
+            </h1>
+
+            <p
+              style={{
+                ...styles.pageSubtitle,
+                color: darkMode
+                  ? "#94a3b8"
+                  : "#64748b",
+              }}
+            >
+              Welcome,{" "}
+              {currentUser?.name || "User"}
+            </p>
+          </div>
+
+          <div style={styles.topActions}>
+            <button
+              type="button"
+              onClick={() =>
+                setDarkMode(!darkMode)
+              }
+              style={styles.iconButton}
+              title="Toggle dark mode"
+            >
+              {darkMode ? "☀️" : "🌙"}
+            </button>
+
+            <div
+              style={{
+                ...styles.connectionBadge,
+                background: "#dcfce7",
+                color: "#166534",
+              }}
+            >
+              ● API Connected
+            </div>
+          </div>
+        </header>
+
+        {error && (
+          <div style={styles.globalError}>
+            <span>{error}</span>
+
+            <button
+              type="button"
+              onClick={() => setError("")}
+              style={styles.errorClose}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {loading && (
+          <div style={styles.loadingBar}>
+            Loading CRM data...
+          </div>
+        )}
+
+        <section style={styles.content}>
+          {page === "Dashboard" && (
+            <>
+              <div style={styles.welcomeCard}>
+                <div>
+                  <div style={styles.welcomeEyebrow}>
+                    CRM PRO
+                  </div>
+
+                  <h2
+                    style={{
+                      margin: "5px 0 8px",
+                      fontSize: 27,
+                    }}
+                  >
+                    Your business at a glance
+                  </h2>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: darkMode
+                        ? "#cbd5e1"
+                        : "#64748b",
+                    }}
+                  >
+                    Manage customers, leads,
+                    deals and follow-ups from
+                    one place.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openAddLead}
+                  style={styles.primaryButton}
+                >
+                  + Add Lead
+                </button>
+              </div>
+
+              <div style={styles.statsGrid}>
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    👥
+                  </div>
+                  <div>
+                    <div style={styles.statLabel}>
+                      Total Customers
+                    </div>
+                    <div style={styles.statValue}>
+                      {customers.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    🎯
+                  </div>
+                  <div>
+                    <div style={styles.statLabel}>
+                      Total Leads
+                    </div>
+                    <div style={styles.statValue}>
+                      {leads.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    💼
+                  </div>
+                  <div>
+                    <div style={styles.statLabel}>
+                      Open Deals
+                    </div>
+                    <div style={styles.statValue}>
+                      {openDeals}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    💰
+                  </div>
+                  <div>
+                    <div style={styles.statLabel}>
+                      Won Revenue
+                    </div>
+                    <div style={styles.statValue}>
+                      ₹
+                      {revenue.toLocaleString(
+                        "en-IN"
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.twoColumn}>
+                <div style={styles.panel}>
+                  <div style={styles.panelHeader}>
+                    <div>
+                      <h3
+                        style={
+                          styles.panelTitle
+                        }
+                      >
+                        Recent Leads
+                      </h3>
+
+                      <p
+                        style={
+                          styles.panelSubtitle
+                        }
+                      >
+                        Latest leads in your CRM
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPage("Leads")
+                      }
+                      style={styles.secondaryButton}
+                    >
+                      View All
+                    </button>
+                  </div>
+
+                  {leads.length === 0 ? (
+                    <EmptyState
+                      icon="🎯"
+                      title="No leads yet"
+                      text="Add your first lead to get started."
+                      button="+ Add Lead"
+                      onClick={openAddLead}
+                    />
+                  ) : (
+                    <div style={styles.list}>
+                      {leads
+                        .slice(0, 5)
+                        .map((lead) => (
+                          <div
+                            key={lead._id}
+                            style={styles.listItem}
+                          >
+                            <div
+                              style={
+                                styles.listAvatar
+                              }
+                            >
+                              {(
+                                lead.name ||
+                                "L"
+                              )
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
+
+                            <div
+                              style={{
+                                flex: 1,
+                                minWidth: 0,
+                              }}
+                            >
+                              <strong>
+                                {lead.name}
+                              </strong>
+
+                              <div
+                                style={
+                                  styles.smallText
+                                }
+                              >
+                                {lead.phone}
+                              </div>
+                            </div>
+
+                            <StatusBadge
+                              status={
+                                lead.status
+                              }
+                            />
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={styles.panel}>
+                  <div style={styles.panelHeader}>
+                    <div>
+                      <h3
+                        style={
+                          styles.panelTitle
+                        }
+                      >
+                        Quick Actions
+                      </h3>
+
+                      <p
+                        style={
+                          styles.panelSubtitle
+                        }
+                      >
+                        Common CRM actions
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={styles.quickGrid}>
+                    <button
+                      type="button"
+                      onClick={openAddCustomer}
+                      style={styles.quickButton}
+                    >
+                      <span>👥</span>
+                      <strong>
+                        Add Customer
+                      </strong>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={openAddLead}
+                      style={styles.quickButton}
+                    >
+                      <span>🎯</span>
+                      <strong>Add Lead</strong>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={openAddDeal}
+                      style={styles.quickButton}
+                    >
+                      <span>💼</span>
+                      <strong>Add Deal</strong>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInteractionForm({
+                          ...emptyInteraction,
+                        });
+                        setShowInteractionModal(
+                          true
+                        );
+                      }}
+                      style={styles.quickButton}
+                    >
+                      <span>💬</span>
+                      <strong>
+                        Add Interaction
+                      </strong>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {page === "Customers" && (
+            <div style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <h2 style={styles.panelTitle}>
+                    Customers
+                  </h2>
+
+                  <p style={styles.panelSubtitle}>
+                    Manage all your customers
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openAddCustomer}
+                  style={styles.primaryButton}
+                >
+                  + Add Customer
+                </button>
+              </div>
+
+              <div style={styles.toolbar}>
+                <input
+                  type="search"
+                  placeholder="Search customers..."
+                  value={customerSearch}
+                  onChange={(e) =>
+                    setCustomerSearch(
+                      e.target.value
+                    )
+                  }
+                  style={{
+                    ...styles.searchInput,
+                    background: darkMode
+                      ? "#0f172a"
+                      : "#ffffff",
+                    color: darkMode
+                      ? "#f8fafc"
+                      : "#0f172a",
+                  }}
+                />
+              </div>
+
+              {filteredCustomers.length ===
+              0 ? (
+                <EmptyState
+                  icon="👥"
+                  title="No customers found"
+                  text={
+                    customerSearch
+                      ? "Try another search."
+                      : "Add your first customer."
+                  }
+                  button={
+                    customerSearch
+                      ? null
+                      : "+ Add Customer"
+                  }
+                  onClick={
+                    customerSearch
+                      ? null
+                      : openAddCustomer
+                  }
+                />
+              ) : (
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>
+                          Customer
+                        </th>
+                        <th style={styles.th}>
+                          Phone
+                        </th>
+                        <th style={styles.th}>
+                          Email
+                        </th>
+                        <th style={styles.th}>
+                          Company
+                        </th>
+                        <th style={styles.th}>
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {filteredCustomers.map(
+                        (customer) => (
+                          <tr key={customer._id}>
+                            <td
+                              style={
+                                styles.td
+                              }
+                            >
+                              <div
+                                style={
+                                  styles.customerCell
+                                }
+                              >
+                                <div
+                                  style={
+                                    styles.listAvatar
+                                  }
+                                >
+                                  {(
+                                    customer.name ||
+                                    "C"
+                                  )
+                                    .charAt(0)
+                                    .toUpperCase()}
+                                </div>
+
+                                <strong>
+                                  {
+                                    customer.name
+                                  }
+                                </strong>
+                              </div>
+                            </td>
+
+                            <td style={styles.td}>
+                              {customer.phone ||
+                                "—"}
+                            </td>
+
+                            <td style={styles.td}>
+                              {customer.email ||
+                                "—"}
+                            </td>
+
+                            <td style={styles.td}>
+                              {customer.company ||
+                                "—"}
+                            </td>
+
+                            <td style={styles.td}>
+                              <div
+                                style={
+                                  styles.actionRow
+                                }
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openCommunication(
+                                      customer
+                                    )
+                                  }
+                                  style={
+                                    styles.smallAction
+                                  }
+                                  title="Contact"
+                                >
+                                  💬
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openEditCustomer(
+                                      customer
+                                    )
+                                  }
+                                  style={
+                                    styles.smallAction
+                                  }
+                                >
+                                  ✏️
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    deleteCustomer(
+                                      customer._id
+                                    )
+                                  }
+                                  style={{
+                                    ...styles.smallAction,
+                                    color: "#dc2626",
+                                  }}
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {page === "Leads" && (
+            <div style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <h2 style={styles.panelTitle}>
+                    Leads
+                  </h2>
+
+                  <p style={styles.panelSubtitle}>
+                    Capture and manage leads from
+                    Facebook, Instagram, WhatsApp,
+                    Google and other sources.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openAddLead}
+                  style={styles.primaryButton}
+                >
+                  + Add Lead
+                </button>
+              </div>
+
+              <div style={styles.leadSummary}>
+                <div style={styles.miniStat}>
+                  <span>All Leads</span>
+                  <strong>{leads.length}</strong>
+                </div>
+
+                <div style={styles.miniStat}>
+                  <span>New</span>
+                  <strong>{newLeads}</strong>
+                </div>
+
+                <div style={styles.miniStat}>
+                  <span>Converted</span>
+                  <strong>
+                    {convertedLeads}
+                  </strong>
+                </div>
+              </div>
+
+              <div style={styles.toolbar}>
+                <input
+                  type="search"
+                  placeholder="Search leads..."
+                  value={leadSearch}
+                  onChange={(e) =>
+                    setLeadSearch(
+                      e.target.value
+                    )
+                  }
+                  style={{
+                    ...styles.searchInput,
+                    background: darkMode
+                      ? "#0f172a"
+                      : "#ffffff",
+                    color: darkMode
+                      ? "#f8fafc"
+                      : "#0f172a",
+                  }}
+                />
+              </div>
+
+              {filteredLeads.length === 0 ? (
+                <EmptyState
+                  icon="🎯"
+                  title="No leads found"
+                  text={
+                    leadSearch
+                      ? "Try another search."
+                      : "Create a lead or connect an ad lead webhook later."
+                  }
+                  button={
+                    leadSearch
+                      ? null
+                      : "+ Add Lead"
+                  }
+                  onClick={
+                    leadSearch
+                      ? null
+                      : openAddLead
+                  }
+                />
+              ) : (
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>
+                          Lead
+                        </th>
+                        <th style={styles.th}>
+                          Phone
+                        </th>
+                        <th style={styles.th}>
+                          Source
+                        </th>
+                        <th style={styles.th}>
+                          Status
+                        </th>
+                        <th style={styles.th}>
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {filteredLeads.map(
+                        (lead) => (
+                          <tr key={lead._id}>
+                            <td style={styles.td}>
+                              <div
+                                style={
+                                  styles.customerCell
+                                }
+                              >
+                                <div
+                                  style={
+                                    styles.listAvatar
+                                  }
+                                >
+                                  {(
+                                    lead.name ||
+                                    "L"
+                                  )
+                                    .charAt(0)
+                                    .toUpperCase()}
+                                </div>
+
+                                <div>
+                                  <strong>
+                                    {lead.name}
+                                  </strong>
+
+                                  {lead.email && (
+                                    <div
+                                      style={
+                                        styles.smallText
+                                      }
+                                    >
+                                      {lead.email}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td style={styles.td}>
+                              {lead.phone ||
+                                "—"}
+                            </td>
+
+                            <td style={styles.td}>
+                              <span
+                                style={
+                                  styles.sourceBadge
+                                }
+                              >
+                                {lead.platform ||
+                                  "Other"}
+                              </span>
+                            </td>
+
+                            <td style={styles.td}>
+                              <StatusBadge
+                                status={
+                                  lead.status
+                                }
+                              />
+                            </td>
+
+                            <td style={styles.td}>
+                              <div
+                                style={
+                                  styles.actionRow
+                                }
+                              >
+                                {!lead.convertedToCustomer &&
+                                  lead.status !==
+                                    "Converted" && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        convertLead(
+                                          lead
+                                        )
+                                      }
+                                      disabled={
+                                        leadLoading
+                                      }
+                                      style={
+                                        styles.convertButton
+                                      }
+                                    >
+                                      Convert
+                                    </button>
+                                  )}
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openEditLead(
+                                      lead
+                                    )
+                                  }
+                                  style={
+                                    styles.smallAction
+                                  }
+                                >
+                                  ✏️
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    deleteLead(
+                                      lead._id
+                                    )
+                                  }
+                                  style={{
+                                    ...styles.smallAction,
+                                    color: "#dc2626",
+                                  }}
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {page === "Deals" && (
+            <div style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <h2 style={styles.panelTitle}>
+                    Deals
+                  </h2>
+
+                  <p style={styles.panelSubtitle}>
+                    Manage sales opportunities.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openAddDeal}
+                  style={styles.primaryButton}
+                >
+                  + Add Deal
+                </button>
+              </div>
+
+              <div style={styles.toolbar}>
+                <input
+                  type="search"
+                  placeholder="Search deals..."
+                  value={dealSearch}
+                  onChange={(e) =>
+                    setDealSearch(
+                      e.target.value
+                    )
+                  }
+                  style={{
+                    ...styles.searchInput,
+                    background: darkMode
+                      ? "#0f172a"
+                      : "#ffffff",
+                    color: darkMode
+                      ? "#f8fafc"
+                      : "#0f172a",
+                  }}
+                />
+              </div>
+
+              {filteredDeals.length === 0 ? (
+                <EmptyState
+                  icon="💼"
+                  title="No deals found"
+                  text="Create your first sales deal."
+                  button="+ Add Deal"
+                  onClick={openAddDeal}
+                />
+              ) : (
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>
+                          Deal
+                        </th>
+                        <th style={styles.th}>
+                          Customer
+                        </th>
+                        <th style={styles.th}>
+                          Amount
+                        </th>
+                        <th style={styles.th}>
+                          Status
+                        </th>
+                        <th style={styles.th}>
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {filteredDeals.map(
+                        (deal) => {
+                          const customer =
+                            deal.customerId &&
+                            typeof deal.customerId ===
+                              "object"
+                              ? deal.customerId
+                              : customers.find(
+                                  (c) =>
+                                    c._id ===
+                                    deal.customerId
+                                );
+
+                          return (
+                            <tr key={deal._id}>
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                <strong>
+                                  {deal.title ||
+                                    "Untitled Deal"}
+                                </strong>
+
+                                {deal.notes && (
+                                  <div
+                                    style={
+                                      styles.smallText
+                                    }
+                                  >
+                                    {deal.notes}
+                                  </div>
+                                )}
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                {customer?.name ||
+                                  "—"}
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                ₹
+                                {Number(
+                                  deal.amount || 0
+                                ).toLocaleString(
+                                  "en-IN"
+                                )}
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                <StatusBadge
+                                  status={
+                                    deal.status
+                                  }
+                                />
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                <div
+                                  style={
+                                    styles.actionRow
+                                  }
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openEditDeal(
+                                        deal
+                                      )
+                                    }
+                                    style={
+                                      styles.smallAction
+                                    }
+                                  >
+                                    ✏️
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      deleteDeal(
+                                        deal._id
+                                      )
+                                    }
+                                    style={{
+                                      ...styles.smallAction,
+                                      color:
+                                        "#dc2626",
+                                    }}
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {page === "Tasks" && (
+            <div style={styles.panel}>
+              <div style={styles.placeholder}>
+                <div style={styles.placeholderIcon}>
+                  ✅
+                </div>
+
+                <h2>Tasks</h2>
+
+                <p>
+                  Task management section is ready.
+                  You can add the full Task CRUD
+                  module when the task backend
+                  routes are added.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {page === "Reports" && (
+            <div>
+              <div style={styles.statsGrid}>
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    👥
+                  </div>
+                  <div>
+                    <div style={styles.statLabel}>
+                      Customers
+                    </div>
+                    <div style={styles.statValue}>
+                      {customers.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    🎯
+                  </div>
+                  <div>
+                    <div style={styles.statLabel}>
+                      Leads
+                    </div>
+                    <div style={styles.statValue}>
+                      {leads.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    💼
+                  </div>
+                  <div>
+                    <div style={styles.statLabel}>
+                      Deals
+                    </div>
+                    <div style={styles.statValue}>
+                      {deals.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    💰
+                  </div>
+                  <div>
+                    <div style={styles.statLabel}>
+                      Revenue
+                    </div>
+                    <div style={styles.statValue}>
+                      ₹
+                      {revenue.toLocaleString(
+                        "en-IN"
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.twoColumn}>
+                <div style={styles.panel}>
+                  <h3 style={styles.panelTitle}>
+                    Lead Status
+                  </h3>
+
+                  <div style={styles.reportList}>
+                    {LEAD_STATUSES.map(
+                      (status) => {
+                        const count =
+                          leads.filter(
+                            (lead) =>
+                              lead.status ===
+                              status
+                          ).length;
+
+                        return (
+                          <div
+                            key={status}
+                            style={
+                              styles.reportRow
+                            }
+                          >
+                            <span>
+                              {status}
+                            </span>
+
+                            <strong>
+                              {count}
+                            </strong>
+                          </div>
+                        );
+                      }
+                    )}
+                  </div>
+                </div>
+
+                <div style={styles.panel}>
+                  <h3 style={styles.panelTitle}>
+                    Deal Status
+                  </h3>
+
+                  <div style={styles.reportList}>
+                    {DEAL_STATUSES.map(
+                      (status) => {
+                        const count =
+                          deals.filter(
+                            (deal) =>
+                              deal.status ===
+                              status
+                          ).length;
+
+                        return (
+                          <div
+                            key={status}
+                            style={
+                              styles.reportRow
+                            }
+                          >
+                            <span>
+                              {status}
+                            </span>
+
+                            <strong>
+                              {count}
+                            </strong>
+                          </div>
+                        );
+                      }
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {page === "Settings" && (
+            <div style={styles.twoColumn}>
+              <div style={styles.panel}>
+                <h2 style={styles.panelTitle}>
+                  Account
+                </h2>
+
+                <div style={styles.settingRow}>
+                  <div>
+                    <strong>Login ID</strong>
+
+                    <p
+                      style={
+                        styles.panelSubtitle
+                      }
+                    >
+                      {currentUser?.name ||
+                        "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={styles.settingRow}>
+                  <div>
+                    <strong>User ID</strong>
+
+                    <p
+                      style={
+                        styles.panelSubtitle
+                      }
+                    >
+                      {currentUser?.id ||
+                        "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={styles.settingRow}>
+                  <div>
+                    <strong>API</strong>
+
+                    <p
+                      style={
+                        styles.panelSubtitle
+                      }
+                    >
+                      {API_URL}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.panel}>
+                <h2 style={styles.panelTitle}>
+                  Preferences
+                </h2>
+
+                <div style={styles.settingRow}>
+                  <div>
+                    <strong>Dark Mode</strong>
+
+                    <p
+                      style={
+                        styles.panelSubtitle
+                      }
+                    >
+                      {darkMode
+                        ? "Dark mode is ON"
+                        : "Dark mode is OFF"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDarkMode(!darkMode)
+                    }
+                    style={
+                      darkMode
+                        ? styles.primaryButton
+                        : styles.secondaryButton
+                    }
+                  >
+                    {darkMode ? "ON" : "OFF"}
+                  </button>
+                </div>
+
+                <div style={styles.settingRow}>
+                  <div>
+                    <strong>
+                      Database Customers
+                    </strong>
+
+                    <p
+                      style={
+                        styles.panelSubtitle
+                      }
+                    >
+                      {customers.length} customers
+                      loaded
+                    </p>
+                  </div>
+                </div>
+
+                <div style={styles.settingRow}>
+                  <div>
+                    <strong>
+                      Database Leads
+                    </strong>
+
+                    <p
+                      style={
+                        styles.panelSubtitle
+                      }
+                    >
+                      {leads.length} leads loaded
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      </main>
+
+      {showCustomerModal && (
+        <Modal
+          title={
+            editingCustomer
+              ? "Edit Customer"
+              : "Add Customer"
+          }
+          onClose={() =>
+            setShowCustomerModal(false)
+          }
+        >
+          <form onSubmit={saveCustomer}>
+            <div style={styles.formGrid}>
+              <FormInput
+                label="Name *"
+                value={customerForm.name}
+                onChange={(value) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    name: value,
+                  })
+                }
+                required
+              />
+
+              <FormInput
+                label="Phone *"
+                value={customerForm.phone}
+                onChange={(value) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    phone: value,
+                  })
+                }
+                required
+              />
+
+              <FormInput
+                label="Email"
+                type="email"
+                value={customerForm.email}
+                onChange={(value) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    email: value,
+                  })
+                }
+              />
+
+              <FormInput
+                label="Company"
+                value={customerForm.company}
+                onChange={(value) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    company: value,
+                  })
+                }
+              />
+            </div>
+
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowCustomerModal(false)
+                }
+                style={styles.secondaryButton}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={savingCustomer}
+                style={styles.primaryButton}
+              >
+                {savingCustomer
+                  ? "Saving..."
+                  : editingCustomer
+                  ? "Update Customer"
+                  : "Save Customer"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showLeadModal && (
+        <Modal
+          title={
+            editingLead
+              ? "Edit Lead"
+              : "Add Lead"
+          }
+          onClose={() =>
+            setShowLeadModal(false)
+          }
+          width={650}
+        >
+          <form onSubmit={saveLead}>
+            <div style={styles.formGrid}>
+              <FormInput
+                label="Name *"
+                value={leadForm.name}
+                onChange={(value) =>
+                  setLeadForm({
+                    ...leadForm,
+                    name: value,
+                  })
+                }
+                required
+              />
+
+              <FormInput
+                label="Phone *"
+                value={leadForm.phone}
+                onChange={(value) =>
+                  setLeadForm({
+                    ...leadForm,
+                    phone: value,
+                  })
+                }
+                required
+              />
+
+              <FormInput
+                label="Email"
+                type="email"
+                value={leadForm.email}
+                onChange={(value) =>
+                  setLeadForm({
+                    ...leadForm,
+                    email: value,
+                  })
+                }
+              />
+
+              <FormSelect
+                label="Platform / Source"
+                value={leadForm.platform}
+                onChange={(value) =>
+                  setLeadForm({
+                    ...leadForm,
+                    platform: value,
+                  })
+                }
+                options={PLATFORMS}
+              />
+
+              <FormSelect
+                label="Status"
+                value={leadForm.status}
+                onChange={(value) =>
+                  setLeadForm({
+                    ...leadForm,
+                    status: value,
+                  })
+                }
+                options={LEAD_STATUSES}
+              />
+
+              <FormInput
+                label="External Lead ID"
+                value={
+                  leadForm.externalLeadId
+                }
+                onChange={(value) =>
+                  setLeadForm({
+                    ...leadForm,
+                    externalLeadId: value,
+                  })
+                }
+              />
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Message
+              </label>
+
+              <textarea
+                rows={4}
+                value={leadForm.message}
+                onChange={(e) =>
+                  setLeadForm({
+                    ...leadForm,
+                    message: e.target.value,
+                  })
+                }
+                placeholder="Lead message..."
+                style={{
+                  ...styles.input,
+                  resize: "vertical",
+                }}
+              />
+            </div>
+
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowLeadModal(false)
+                }
+                style={styles.secondaryButton}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={savingLead}
+                style={styles.primaryButton}
+              >
+                {savingLead
+                  ? "Saving..."
+                  : editingLead
+                  ? "Update Lead"
+                  : "Save Lead"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showDealModal && (
+        <Modal
+          title={
+            editingDeal
+              ? "Edit Deal"
+              : "Add Deal"
+          }
+          onClose={() =>
+            setShowDealModal(false)
+          }
+        >
+          <form onSubmit={saveDeal}>
+            <div style={styles.formGrid}>
+              <FormInput
+                label="Deal Title *"
+                value={dealForm.title}
+                onChange={(value) =>
+                  setDealForm({
+                    ...dealForm,
+                    title: value,
+                  })
+                }
+                required
+              />
+
+              <FormSelect
+                label="Customer"
+                value={dealForm.customerId}
+                onChange={(value) =>
+                  setDealForm({
+                    ...dealForm,
+                    customerId: value,
+                  })
+                }
+                options={[
+                  {
+                    value: "",
+                    label: "No customer",
+                  },
+                  ...customers.map(
+                    (customer) => ({
+                      value: customer._id,
+                      label: customer.name,
+                    })
+                  ),
+                ]}
+              />
+
+              <FormInput
+                label="Amount"
+                type="number"
+                value={dealForm.amount}
+                onChange={(value) =>
+                  setDealForm({
+                    ...dealForm,
+                    amount: value,
+                  })
+                }
+              />
+
+              <FormSelect
+                label="Status"
+                value={dealForm.status}
+                onChange={(value) =>
+                  setDealForm({
+                    ...dealForm,
+                    status: value,
+                  })
+                }
+                options={DEAL_STATUSES}
+              />
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Notes
+              </label>
+
+              <textarea
+                rows={4}
+                value={dealForm.notes}
+                onChange={(e) =>
+                  setDealForm({
+                    ...dealForm,
+                    notes: e.target.value,
+                  })
+                }
+                style={{
+                  ...styles.input,
+                  resize: "vertical",
+                }}
+              />
+            </div>
+
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowDealModal(false)
+                }
+                style={styles.secondaryButton}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={savingDeal}
+                style={styles.primaryButton}
+              >
+                {savingDeal
+                  ? "Saving..."
+                  : editingDeal
+                  ? "Update Deal"
+                  : "Save Deal"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showInteractionModal && (
+        <Modal
+          title="Add Interaction"
+          onClose={() =>
+            setShowInteractionModal(false)
+          }
+        >
+          <form onSubmit={saveInteraction}>
+            <FormSelect
+              label="Customer"
+              value={
+                interactionForm.customerId
+              }
+              onChange={(value) =>
+                setInteractionForm({
+                  ...interactionForm,
+                  customerId: value,
+                })
+              }
+              options={[
+                {
+                  value: "",
+                  label: "Select customer",
+                },
+                ...customers.map(
+                  (customer) => ({
+                    value: customer._id,
+                    label: customer.name,
+                  })
+                ),
+              ]}
+            />
+
+            <FormSelect
+              label="Type"
+              value={interactionForm.type}
+              onChange={(value) =>
+                setInteractionForm({
+                  ...interactionForm,
+                  type: value,
+                })
+              }
+              options={[
+                "Call",
+                "WhatsApp",
+                "SMS",
+                "Email",
+                "Meeting",
+                "Other",
+              ]}
+            />
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Message
+              </label>
+
+              <textarea
+                rows={5}
+                value={
+                  interactionForm.message
+                }
+                onChange={(e) =>
+                  setInteractionForm({
+                    ...interactionForm,
+                    message: e.target.value,
+                  })
+                }
+                style={{
+                  ...styles.input,
+                  resize: "vertical",
+                }}
+                required
+              />
+            </div>
+
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowInteractionModal(
+                    false
+                  )
+                }
+                style={styles.secondaryButton}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={savingInteraction}
+                style={styles.primaryButton}
+              >
+                {savingInteraction
+                  ? "Saving..."
+                  : "Save Interaction"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showCommunicationModal &&
+        communicationCustomer && (
+          <Modal
+            title="Contact Customer"
+            onClose={() =>
+              setShowCommunicationModal(
+                false
+              )
+            }
+          >
+            <div style={styles.contactBox}>
+              <div style={styles.listAvatar}>
+                {(
+                  communicationCustomer.name ||
+                  "C"
+                )
+                  .charAt(0)
+                  .toUpperCase()}
+              </div>
+
+              <div>
+                <strong>
+                  {communicationCustomer.name}
+                </strong>
+
+                <div style={styles.smallText}>
+                  {communicationCustomer.phone}
+                </div>
+              </div>
+            </div>
+
+            <FormSelect
+              label="Communication"
+              value={communicationType}
+              onChange={setCommunicationType}
+              options={[
+                "WhatsApp",
+                "Call",
+                "SMS",
+              ]}
+            />
+
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowCommunicationModal(
+                    false
+                  )
+                }
+                style={styles.secondaryButton}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={startCommunication}
+                style={styles.primaryButton}
+              >
+                Continue
+              </button>
+            </div>
+          </Modal>
+        )}
+    </div>
+  );
+}
+
+function FormInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required = false,
 }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent:
-          "flex-end",
-        gap: 10,
-        marginTop: 20,
-      }}
-    >
-      <button
-        type="button"
-        onClick={onCancel}
-        style={{
-          padding: "11px 16px",
-          borderRadius: 8,
-          border:
-            "1px solid #cbd5e1",
-          background: "#fff",
-          cursor: "pointer",
-        }}
-      >
-        Cancel
-      </button>
+    <div style={styles.formGroup}>
+      <label style={styles.label}>
+        {label}
+      </label>
 
-      <button
-        type="submit"
-        style={{
-          padding: "11px 18px",
-          borderRadius: 8,
-          border: "none",
-          background: "#2563eb",
-          color: "#fff",
-          cursor: "pointer",
-          fontWeight: 700,
-        }}
-      >
-        {submitText}
-      </button>
+      <input
+        type={type}
+        required={required}
+        value={value}
+        onChange={(e) =>
+          onChange(e.target.value)
+        }
+        style={styles.input}
+      />
     </div>
   );
 }
 
-function Loading() {
+function FormSelect({
+  label,
+  value,
+  onChange,
+  options = [],
+}) {
   return (
-    <div
-      style={{
-        padding: 35,
-        textAlign: "center",
-      }}
-    >
-      ⏳ Loading...
+    <div style={styles.formGroup}>
+      <label style={styles.label}>
+        {label}
+      </label>
+
+      <select
+        value={value}
+        onChange={(e) =>
+          onChange(e.target.value)
+        }
+        style={styles.input}
+      >
+        {options.map((option, index) => {
+          const isObject =
+            typeof option === "object";
+
+          const optionValue = isObject
+            ? option.value
+            : option;
+
+          const optionLabel = isObject
+            ? option.label
+            : option;
+
+          return (
+            <option
+              key={`${optionValue}-${index}`}
+              value={optionValue}
+            >
+              {optionLabel}
+            </option>
+          );
+        })}
+      </select>
     </div>
   );
 }
 
-function Empty({ text }) {
+function EmptyState({
+  icon,
+  title,
+  text,
+  button,
+  onClick,
+}) {
   return (
-    <div
-      style={{
-        padding: 35,
-        textAlign: "center",
-        color: "#64748b",
-      }}
-    >
-      {text}
+    <div style={styles.emptyState}>
+      <div style={styles.emptyIcon}>
+        {icon}
+      </div>
+
+      <h3 style={{ margin: "0 0 7px" }}>
+        {title}
+      </h3>
+
+      <p style={styles.emptyText}>
+        {text}
+      </p>
+
+      {button && onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          style={styles.primaryButton}
+        >
+          {button}
+        </button>
+      )}
     </div>
   );
 }
 
-/* STYLES */
+const styles = {
+  app: {
+    minHeight: "100vh",
+    display: "flex",
+    fontFamily:
+      "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  },
 
-const labelStyle = {
-  display: "block",
-  marginTop: 14,
-  marginBottom: 6,
-  fontWeight: 700,
-  fontSize: 14,
+  sidebar: {
+    width: 245,
+    minHeight: "100vh",
+    borderRight: "1px solid",
+    display: "flex",
+    flexDirection: "column",
+    position: "sticky",
+    top: 0,
+    boxSizing: "border-box",
+  },
+
+  logo: {
+    padding: "25px 20px",
+    fontSize: 21,
+    fontWeight: 800,
+    borderBottom: "1px solid #e5e7eb",
+  },
+
+  nav: {
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
+  },
+
+  navButton: {
+    border: "none",
+    borderRadius: 10,
+    padding: "12px 14px",
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: "pointer",
+    textAlign: "left",
+  },
+
+  sidebarBottom: {
+    marginTop: "auto",
+    padding: 14,
+  },
+
+  userMini: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: "50%",
+    background: "#4f46e5",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 800,
+  },
+
+  logoutButton: {
+    width: "100%",
+    padding: "10px 12px",
+    border: "1px solid #fecaca",
+    background: "#fff1f2",
+    color: "#be123c",
+    borderRadius: 9,
+    cursor: "pointer",
+    fontWeight: 600,
+  },
+
+  main: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  topbar: {
+    minHeight: 78,
+    borderBottom: "1px solid",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "14px 28px",
+    boxSizing: "border-box",
+  },
+
+  pageTitle: {
+    margin: 0,
+    fontSize: 25,
+    fontWeight: 800,
+  },
+
+  pageSubtitle: {
+    margin: "4px 0 0",
+    fontSize: 13,
+  },
+
+  topActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    border: "1px solid #e2e8f0",
+    background: "#fff",
+    cursor: "pointer",
+    fontSize: 18,
+  },
+
+  connectionBadge: {
+    padding: "8px 12px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+  },
+
+  content: {
+    padding: 28,
+    maxWidth: 1450,
+    margin: "0 auto",
+    boxSizing: "border-box",
+  },
+
+  welcomeCard: {
+    background:
+      "linear-gradient(135deg, #4f46e5, #6366f1)",
+    color: "#fff",
+    borderRadius: 18,
+    padding: 26,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 20,
+    marginBottom: 22,
+  },
+
+  welcomeEyebrow: {
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: 1.5,
+    opacity: 0.8,
+  },
+
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: 16,
+    marginBottom: 22,
+  },
+
+  statCard: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 15,
+    padding: 19,
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+
+  statIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 12,
+    background: "#eef2ff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 21,
+  },
+
+  statLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    marginBottom: 4,
+  },
+
+  statValue: {
+    fontSize: 23,
+    fontWeight: 800,
+  },
+
+  twoColumn: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(300px, 1fr))",
+    gap: 20,
+  },
+
+  panel: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 15,
+    marginBottom: 18,
+  },
+
+  panelTitle: {
+    margin: 0,
+    fontSize: 18,
+    fontWeight: 800,
+  },
+
+  panelSubtitle: {
+    margin: "4px 0 0",
+    color: "#64748b",
+    fontSize: 13,
+  },
+
+  primaryButton: {
+    border: "none",
+    background: "#4f46e5",
+    color: "#fff",
+    borderRadius: 9,
+    padding: "10px 15px",
+    cursor: "pointer",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+
+  secondaryButton: {
+    border: "1px solid #cbd5e1",
+    background: "#fff",
+    color: "#334155",
+    borderRadius: 9,
+    padding: "9px 14px",
+    cursor: "pointer",
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  },
+
+  quickGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(2, 1fr)",
+    gap: 10,
+  },
+
+  quickButton: {
+    minHeight: 90,
+    border: "1px solid #e2e8f0",
+    background: "#fff",
+    borderRadius: 12,
+    cursor: "pointer",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    color: "#334155",
+  },
+
+  list: {
+    display: "flex",
+    flexDirection: "column",
+  },
+
+  listItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 11,
+    padding: "11px 0",
+    borderBottom: "1px solid #f1f5f9",
+  },
+
+  listAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: "50%",
+    background: "#eef2ff",
+    color: "#4f46e5",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 800,
+    flexShrink: 0,
+  },
+
+  smallText: {
+    color: "#64748b",
+    fontSize: 12,
+    marginTop: 3,
+  },
+
+  badge: {
+    padding: "5px 9px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+
+  sourceBadge: {
+    display: "inline-block",
+    padding: "5px 9px",
+    background: "#f1f5f9",
+    color: "#475569",
+    borderRadius: 7,
+    fontSize: 11,
+    fontWeight: 700,
+  },
+
+  toolbar: {
+    display: "flex",
+    gap: 10,
+    marginBottom: 18,
+  },
+
+  searchInput: {
+    width: "100%",
+    maxWidth: 430,
+    padding: "11px 13px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    outline: "none",
+    boxSizing: "border-box",
+  },
+
+  tableWrap: {
+    width: "100%",
+    overflowX: "auto",
+  },
+
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    minWidth: 700,
+  },
+
+  th: {
+    textAlign: "left",
+    padding: "12px 10px",
+    background: "#f8fafc",
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: 800,
+    borderBottom: "1px solid #e2e8f0",
+  },
+
+  td: {
+    padding: "13px 10px",
+    borderBottom: "1px solid #f1f5f9",
+    fontSize: 13,
+  },
+
+  customerCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  actionRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+
+  smallAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    border: "1px solid #e2e8f0",
+    background: "#fff",
+    cursor: "pointer",
+  },
+
+  convertButton: {
+    border: "none",
+    background: "#dcfce7",
+    color: "#166534",
+    borderRadius: 7,
+    padding: "7px 10px",
+    cursor: "pointer",
+    fontSize: 11,
+    fontWeight: 800,
+  },
+
+  leadSummary: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(130px, 1fr))",
+    gap: 10,
+    marginBottom: 18,
+  },
+
+  miniStat: {
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+    padding: 13,
+    background: "#f8fafc",
+  },
+
+  reportList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    marginTop: 15,
+  },
+
+  reportRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "12px 13px",
+    background: "#f8fafc",
+    borderRadius: 9,
+  },
+
+  settingRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 15,
+    padding: "15px 0",
+    borderBottom: "1px solid #e2e8f0",
+  },
+
+  placeholder: {
+    minHeight: 330,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    color: "#64748b",
+  },
+
+  placeholderIcon: {
+    fontSize: 48,
+    marginBottom: 10,
+  },
+
+  emptyState: {
+    textAlign: "center",
+    padding: "55px 20px",
+    color: "#475569",
+  },
+
+  emptyIcon: {
+    fontSize: 42,
+    marginBottom: 12,
+  },
+
+  emptyText: {
+    color: "#64748b",
+    maxWidth: 450,
+    margin: "0 auto 18px",
+    lineHeight: 1.5,
+  },
+
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15, 23, 42, 0.55)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    zIndex: 1000,
+    overflowY: "auto",
+  },
+
+  modal: {
+    width: "100%",
+    background: "#fff",
+    borderRadius: 17,
+    padding: 22,
+    boxSizing: "border-box",
+    maxHeight: "92vh",
+    overflowY: "auto",
+  },
+
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+
+  modalTitle: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 800,
+  },
+
+  closeButton: {
+    width: 35,
+    height: 35,
+    border: "none",
+    borderRadius: 8,
+    background: "#f1f5f9",
+    cursor: "pointer",
+    fontSize: 23,
+    color: "#475569",
+  },
+
+  formGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(2, minmax(0, 1fr))",
+    gap: 13,
+  },
+
+  formGroup: {
+    marginBottom: 14,
+  },
+
+  label: {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#475569",
+    marginBottom: 6,
+  },
+
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "11px 12px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    outline: "none",
+    fontSize: 14,
+    background: "#fff",
+    color: "#0f172a",
+  },
+
+  modalActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 9,
+    marginTop: 20,
+  },
+
+  contactBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    background: "#f8fafc",
+    borderRadius: 11,
+    marginBottom: 16,
+  },
+
+  globalError: {
+    margin: "16px 28px 0",
+    padding: "11px 14px",
+    background: "#fee2e2",
+    color: "#991b1b",
+    border: "1px solid #fecaca",
+    borderRadius: 9,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  errorClose: {
+    border: "none",
+    background: "transparent",
+    color: "#991b1b",
+    cursor: "pointer",
+    fontSize: 18,
+  },
+
+  loadingBar: {
+    margin: "12px 28px 0",
+    padding: "8px 12px",
+    background: "#eef2ff",
+    color: "#4338ca",
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 700,
+  },
+
+  authPage: {
+    minHeight: "100vh",
+    background:
+      "linear-gradient(135deg, #eef2ff, #f8fafc)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    boxSizing: "border-box",
+  },
+
+  authCard: {
+    width: "100%",
+    maxWidth: 410,
+    background: "#fff",
+    borderRadius: 20,
+    padding: 30,
+    boxShadow:
+      "0 20px 60px rgba(15, 23, 42, 0.12)",
+    boxSizing: "border-box",
+  },
+
+  authLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    background: "#eef2ff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 29,
+    margin: "0 auto 13px",
+  },
+
+  authTitle: {
+    textAlign: "center",
+    margin: 0,
+    fontSize: 28,
+    fontWeight: 900,
+  },
+
+  authSubtitle: {
+    textAlign: "center",
+    color: "#64748b",
+    margin: "7px 0 25px",
+  },
+
+  errorBox: {
+    padding: "10px 12px",
+    background: "#fee2e2",
+    color: "#991b1b",
+    border: "1px solid #fecaca",
+    borderRadius: 8,
+    fontSize: 13,
+    marginBottom: 15,
+  },
+
+  authSwitch: {
+    textAlign: "center",
+    marginTop: 18,
+    fontSize: 13,
+    color: "#64748b",
+  },
+
+  linkButton: {
+    border: "none",
+    background: "transparent",
+    color: "#4f46e5",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+
+  authNote: {
+    textAlign: "center",
+    color: "#94a3b8",
+    fontSize: 11,
+    marginTop: 15,
+  },
 };
-
-const sectionHeaderStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 15,
-  flexWrap: "wrap",
-};
-
-const closeButton = {
-  width: 36,
-  height: 36,
-  borderRadius: 9,
-  border: "none",
-  background: "#e2e8f0",
-  color: "#0f172a",
-  cursor: "pointer",
-  fontSize: 18,
-};
-
-const mutedStyle = (theme) => ({
-  color: theme.muted,
-  marginTop: 5,
-});
-
-const inputStyle = (theme) => ({
-  width: "100%",
-  boxSizing: "border-box",
-  padding: "11px 12px",
-  borderRadius: 8,
-  border: `1px solid ${theme.border}`,
-  background: theme.input,
-  color: theme.text,
-  outline: "none",
-  marginBottom: 3,
-});
-
-const authInputStyle = {
-  width: "100%",
-  boxSizing: "border-box",
-  padding: "13px 14px",
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#0f172a",
-  outline: "none",
-  fontSize: 15,
-};
-
-const buttonStyle = (
-  theme,
-  background
-) => ({
-  padding: "10px 16px",
-  borderRadius: 9,
-  border: "none",
-  background,
-  color: "#fff",
-  cursor: "pointer",
-  fontWeight: 700,
-});
-
-const commButton = (background) => ({
-  padding: "13px 10px",
-  borderRadius: 10,
-  border: "none",
-  background,
-  color: "#fff",
-  cursor: "pointer",
-  fontWeight: 700,
-});
-
-export default App;

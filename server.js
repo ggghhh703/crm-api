@@ -9,6 +9,7 @@ const customerRoutes = require("./src/routes/customerRoutes");
 const authRoutes = require("./src/routes/authRoutes");
 const dealRoutes = require("./src/routes/dealRoutes");
 const interactionRoutes = require("./src/routes/interactionRoutes");
+const leadRoutes = require("./src/routes/leadRoutes");
 
 const app = express();
 
@@ -52,7 +53,9 @@ app.get("/health", (req, res) => {
     success: true,
     status: "healthy",
     database:
-      mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+      mongoose.connection.readyState === 1
+        ? "connected"
+        : "disconnected",
   });
 });
 
@@ -67,6 +70,8 @@ app.use("/auth", authRoutes);
 app.use("/deals", dealRoutes);
 
 app.use("/interactions", interactionRoutes);
+
+app.use("/leads", leadRoutes);
 
 // ===============================
 // 404 Handler
@@ -86,9 +91,10 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error("Server Error:", err);
 
-  // Mongoose validation error
   if (err.name === "ValidationError") {
-    const errors = Object.values(err.errors).map((item) => item.message);
+    const errors = Object.values(err.errors).map(
+      (item) => item.message
+    );
 
     return res.status(400).json({
       success: false,
@@ -97,7 +103,6 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Invalid MongoDB ObjectId
   if (err.name === "CastError") {
     return res.status(400).json({
       success: false,
@@ -105,7 +110,6 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Duplicate MongoDB key
   if (err.code === 11000) {
     return res.status(409).json({
       success: false,
@@ -113,7 +117,7 @@ app.use((err, req, res, next) => {
     });
   }
 
-  res.status(500).json({
+  return res.status(500).json({
     success: false,
     message: "Internal server error",
   });
@@ -133,17 +137,23 @@ async function startServer() {
       console.log(`Server running on http://localhost:${PORT}`);
     });
 
-    // Graceful shutdown
+    // ===============================
+    // Graceful Shutdown
+    // ===============================
+
     const shutdown = async (signal) => {
       console.log(`${signal} received. Shutting down...`);
 
       server.close(async () => {
         try {
           await mongoose.connection.close();
+
           console.log("MongoDB connection closed");
+
           process.exit(0);
         } catch (error) {
           console.error("Shutdown error:", error);
+
           process.exit(1);
         }
       });
@@ -152,7 +162,11 @@ async function startServer() {
     process.on("SIGINT", () => shutdown("SIGINT"));
     process.on("SIGTERM", () => shutdown("SIGTERM"));
   } catch (error) {
-    console.error("MongoDB connection failed:", error.message);
+    console.error(
+      "MongoDB connection failed:",
+      error.message
+    );
+
     process.exit(1);
   }
 }

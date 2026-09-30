@@ -4,6 +4,9 @@ const User = require("../models/User");
 
 const JWT_SECRET = process.env.JWT_SECRET || "crm-secret-key";
 
+// =========================
+// SIGNUP
+// =========================
 const signup = async (req, res) => {
   try {
     const { name, password } = req.body;
@@ -31,7 +34,9 @@ const signup = async (req, res) => {
       });
     }
 
-    const existingUser = await User.findOne({ name: cleanName });
+    const existingUser = await User.findOne({
+      name: cleanName,
+    });
 
     if (existingUser) {
       return res.status(409).json({
@@ -84,6 +89,9 @@ const signup = async (req, res) => {
   }
 };
 
+// =========================
+// LOGIN
+// =========================
 const login = async (req, res) => {
   try {
     const { name, password } = req.body;
@@ -97,7 +105,9 @@ const login = async (req, res) => {
 
     const cleanName = name.trim();
 
-    const user = await User.findOne({ name: cleanName }).select("+password");
+    const user = await User.findOne({
+      name: cleanName,
+    }).select("+password");
 
     if (!user) {
       return res.status(401).json({
@@ -106,7 +116,10 @@ const login = async (req, res) => {
       });
     }
 
-    const passwordMatch = await bcrypt.compare(password, user.password);
+    const passwordMatch = await bcrypt.compare(
+      password,
+      user.password
+    );
 
     if (!passwordMatch) {
       return res.status(401).json({
