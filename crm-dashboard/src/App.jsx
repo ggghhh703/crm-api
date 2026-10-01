@@ -1,3 +1,4 @@
+```jsx
 import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL = "https://crm-api-408i.onrender.com";
@@ -27,6 +28,18 @@ const DEAL_STATUSES = [
   "Open",
   "Won",
   "Lost",
+];
+
+const TASK_STATUSES = [
+  "Pending",
+  "In Progress",
+  "Completed",
+];
+
+const TASK_PRIORITIES = [
+  "Low",
+  "Medium",
+  "High",
 ];
 
 const emptyCustomer = {
@@ -60,11 +73,23 @@ const emptyInteraction = {
   message: "",
 };
 
+const emptyTask = {
+  title: "",
+  description: "",
+  customerId: "",
+  status: "Pending",
+  priority: "Medium",
+  dueDate: "",
+};
+
 function getArray(data, key) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.[key])) return data[key];
   if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.data?.[key])) return data.data[key];
+  if (Array.isArray(data?.data?.[key])) {
+    return data.data[key];
+  }
+
   return [];
 }
 
@@ -102,7 +127,12 @@ async function api(path, options = {}, token = "") {
   return data;
 }
 
-function Modal({ title, onClose, children, width = 560 }) {
+function Modal({
+  title,
+  onClose,
+  children,
+  width = 560,
+}) {
   return (
     <div style={styles.overlay}>
       <div
@@ -135,7 +165,8 @@ function StatusBadge({ status }) {
 
   if (
     status === "Won" ||
-    status === "Converted"
+    status === "Converted" ||
+    status === "Completed"
   ) {
     background = "#dcfce7";
     color = "#166534";
@@ -149,9 +180,17 @@ function StatusBadge({ status }) {
     color = "#991b1b";
   }
 
-  if (status === "Contacted") {
+  if (
+    status === "Contacted" ||
+    status === "In Progress"
+  ) {
     background = "#fef3c7";
     color = "#92400e";
+  }
+
+  if (status === "Pending") {
+    background = "#dbeafe";
+    color = "#1d4ed8";
   }
 
   return (
@@ -163,6 +202,38 @@ function StatusBadge({ status }) {
       }}
     >
       {status || "—"}
+    </span>
+  );
+}
+
+function PriorityBadge({ priority }) {
+  let background = "#f1f5f9";
+  let color = "#475569";
+
+  if (priority === "High") {
+    background = "#fee2e2";
+    color = "#991b1b";
+  }
+
+  if (priority === "Medium") {
+    background = "#fef3c7";
+    color = "#92400e";
+  }
+
+  if (priority === "Low") {
+    background = "#dcfce7";
+    color = "#166534";
+  }
+
+  return (
+    <span
+      style={{
+        ...styles.badge,
+        background,
+        color,
+      }}
+    >
+      {priority || "—"}
     </span>
   );
 }
@@ -199,9 +270,7 @@ function AuthScreen({
 
         <form onSubmit={handleAuth}>
           <div style={styles.formGroup}>
-            <label style={styles.label}>
-              ID
-            </label>
+            <label style={styles.label}>ID</label>
 
             <input
               type="text"
@@ -275,6 +344,7 @@ function AuthScreen({
               setAuthMode(
                 isLogin ? "signup" : "login"
               );
+
               setAuthForm({
                 name: "",
                 password: "",
@@ -299,8 +369,8 @@ export default function App() {
     () => localStorage.getItem(TOKEN_KEY) || ""
   );
 
-  const [currentUser, setCurrentUser] = useState(
-    () => {
+  const [currentUser, setCurrentUser] =
+    useState(() => {
       try {
         return JSON.parse(
           localStorage.getItem(USER_KEY) || "null"
@@ -308,10 +378,10 @@ export default function App() {
       } catch {
         return null;
       }
-    }
-  );
+    });
 
-  const [authMode, setAuthMode] = useState("login");
+  const [authMode, setAuthMode] =
+    useState("login");
 
   const [authForm, setAuthForm] = useState({
     name: "",
@@ -321,91 +391,164 @@ export default function App() {
   const [authLoading, setAuthLoading] =
     useState(false);
 
-  const [authError, setAuthError] = useState("");
+  const [authError, setAuthError] =
+    useState("");
 
-  const [darkMode, setDarkMode] = useState(
-    () =>
-      localStorage.getItem(THEME_KEY) === "true"
-  );
+  const [darkMode, setDarkMode] =
+    useState(
+      () =>
+        localStorage.getItem(THEME_KEY) ===
+        "true"
+    );
 
-  const [page, setPage] = useState("Dashboard");
+  const [page, setPage] =
+    useState("Dashboard");
 
-  const [customers, setCustomers] = useState([]);
-  const [leads, setLeads] = useState([]);
-  const [deals, setDeals] = useState([]);
+  const [customers, setCustomers] =
+    useState([]);
+
+  const [leads, setLeads] =
+    useState([]);
+
+  const [deals, setDeals] =
+    useState([]);
+
   const [interactions, setInteractions] =
     useState([]);
 
-  const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(false);
+
   const [leadLoading, setLeadLoading] =
     useState(false);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
   const [customerSearch, setCustomerSearch] =
     useState("");
-  const [leadSearch, setLeadSearch] = useState("");
-  const [dealSearch, setDealSearch] = useState("");
 
-  const [showCustomerModal, setShowCustomerModal] =
-    useState(false);
+  const [leadSearch, setLeadSearch] =
+    useState("");
 
-  const [showLeadModal, setShowLeadModal] =
-    useState(false);
+  const [dealSearch, setDealSearch] =
+    useState("");
 
-  const [showDealModal, setShowDealModal] =
-    useState(false);
+  const [taskSearch, setTaskSearch] =
+    useState("");
+
+  const [
+    showCustomerModal,
+    setShowCustomerModal,
+  ] = useState(false);
+
+  const [
+    showLeadModal,
+    setShowLeadModal,
+  ] = useState(false);
+
+  const [
+    showDealModal,
+    setShowDealModal,
+  ] = useState(false);
 
   const [
     showInteractionModal,
     setShowInteractionModal,
   ] = useState(false);
 
-  const [editingCustomer, setEditingCustomer] =
-    useState(null);
+  const [
+    showTaskModal,
+    setShowTaskModal,
+  ] = useState(false);
 
-  const [editingLead, setEditingLead] =
-    useState(null);
+  const [
+    editingCustomer,
+    setEditingCustomer,
+  ] = useState(null);
 
-  const [editingDeal, setEditingDeal] =
-    useState(null);
+  const [
+    editingLead,
+    setEditingLead,
+  ] = useState(null);
 
-  const [customerForm, setCustomerForm] =
-    useState(emptyCustomer);
+  const [
+    editingDeal,
+    setEditingDeal,
+  ] = useState(null);
 
-  const [leadForm, setLeadForm] =
-    useState(emptyLead);
+  const [
+    editingTask,
+    setEditingTask,
+  ] = useState(null);
 
-  const [dealForm, setDealForm] =
-    useState(emptyDeal);
+  const [
+    customerForm,
+    setCustomerForm,
+  ] = useState(emptyCustomer);
+
+  const [
+    leadForm,
+    setLeadForm,
+  ] = useState(emptyLead);
+
+  const [
+    dealForm,
+    setDealForm,
+  ] = useState(emptyDeal);
 
   const [
     interactionForm,
     setInteractionForm,
   ] = useState(emptyInteraction);
 
-  const [savingCustomer, setSavingCustomer] =
-    useState(false);
+  const [
+    taskForm,
+    setTaskForm,
+  ] = useState(emptyTask);
 
-  const [savingLead, setSavingLead] =
-    useState(false);
+  const [
+    savingCustomer,
+    setSavingCustomer,
+  ] = useState(false);
 
-  const [savingDeal, setSavingDeal] =
-    useState(false);
+  const [
+    savingLead,
+    setSavingLead,
+  ] = useState(false);
+
+  const [
+    savingDeal,
+    setSavingDeal,
+  ] = useState(false);
 
   const [
     savingInteraction,
     setSavingInteraction,
   ] = useState(false);
 
-  const [showCommunicationModal, setShowCommunicationModal] =
-    useState(false);
+  const [
+    savingTask,
+    setSavingTask,
+  ] = useState(false);
 
-  const [communicationCustomer, setCommunicationCustomer] =
-    useState(null);
+  const [
+    showCommunicationModal,
+    setShowCommunicationModal,
+  ] = useState(false);
 
-  const [communicationType, setCommunicationType] =
-    useState("WhatsApp");
+  const [
+    communicationCustomer,
+    setCommunicationCustomer,
+  ] = useState(null);
+
+  const [
+    communicationType,
+    setCommunicationType,
+  ] = useState("WhatsApp");
 
   useEffect(() => {
     localStorage.setItem(
@@ -425,12 +568,17 @@ export default function App() {
     setError("");
 
     try {
-      const [customerData, dealData, leadData] =
-        await Promise.all([
-          api("/customers", {}, token),
-          api("/deals", {}, token),
-          api("/leads", {}, token),
-        ]);
+      const [
+        customerData,
+        dealData,
+        leadData,
+        taskData,
+      ] = await Promise.all([
+        api("/customers", {}, token),
+        api("/deals", {}, token),
+        api("/leads", {}, token),
+        api("/tasks", {}, token),
+      ]);
 
       setCustomers(
         getArray(customerData, "customers")
@@ -444,12 +592,17 @@ export default function App() {
         getArray(leadData, "leads")
       );
 
+      setTasks(
+        getArray(taskData, "tasks")
+      );
+
       try {
-        const interactionData = await api(
-          "/interactions",
-          {},
-          token
-        );
+        const interactionData =
+          await api(
+            "/interactions",
+            {},
+            token
+          );
 
         setInteractions(
           getArray(
@@ -478,17 +631,6 @@ export default function App() {
         authMode === "login"
           ? "/auth/login"
           : "/auth/register";
-
-      /*
-        IMPORTANT:
-        Backend authController expects:
-        {
-          name,
-          password
-        }
-
-        So frontend also sends ID as "name".
-      */
 
       const body = {
         name: authForm.name.trim(),
@@ -550,6 +692,7 @@ export default function App() {
     setLeads([]);
     setDeals([]);
     setInteractions([]);
+    setTasks([]);
 
     setPage("Dashboard");
     setAuthMode("login");
@@ -558,9 +701,11 @@ export default function App() {
 
   function openAddCustomer() {
     setEditingCustomer(null);
+
     setCustomerForm({
       ...emptyCustomer,
     });
+
     setShowCustomerModal(true);
   }
 
@@ -619,6 +764,7 @@ export default function App() {
 
       setShowCustomerModal(false);
       setEditingCustomer(null);
+
       setCustomerForm({
         ...emptyCustomer,
       });
@@ -657,9 +803,11 @@ export default function App() {
 
   function openAddLead() {
     setEditingLead(null);
+
     setLeadForm({
       ...emptyLead,
     });
+
     setShowLeadModal(true);
   }
 
@@ -726,6 +874,7 @@ export default function App() {
 
       setShowLeadModal(false);
       setEditingLead(null);
+
       setLeadForm({
         ...emptyLead,
       });
@@ -906,6 +1055,120 @@ export default function App() {
     }
   }
 
+  function openAddTask() {
+    setEditingTask(null);
+
+    setTaskForm({
+      ...emptyTask,
+    });
+
+    setShowTaskModal(true);
+  }
+
+  function openEditTask(task) {
+    setEditingTask(task);
+
+    setTaskForm({
+      title: task.title || "",
+      description: task.description || "",
+      customerId:
+        task.customerId?._id ||
+        task.customerId ||
+        "",
+      status: task.status || "Pending",
+      priority: task.priority || "Medium",
+      dueDate: task.dueDate
+        ? String(task.dueDate).slice(0, 10)
+        : "",
+    });
+
+    setShowTaskModal(true);
+  }
+
+  async function saveTask(e) {
+    e.preventDefault();
+
+    setSavingTask(true);
+    setError("");
+
+    try {
+      const payload = {
+        title: taskForm.title.trim(),
+        description:
+          taskForm.description.trim(),
+        customerId:
+          taskForm.customerId || null,
+        status: taskForm.status,
+        priority: taskForm.priority,
+        dueDate:
+          taskForm.dueDate || null,
+      };
+
+      if (!payload.title) {
+        throw new Error(
+          "Task title is required"
+        );
+      }
+
+      if (editingTask) {
+        await api(
+          `/tasks/${editingTask._id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      } else {
+        await api(
+          "/tasks",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      }
+
+      setShowTaskModal(false);
+      setEditingTask(null);
+
+      setTaskForm({
+        ...emptyTask,
+      });
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
+  async function deleteTask(id) {
+    if (
+      !window.confirm(
+        "Delete this task?"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api(
+        `/tasks/${id}`,
+        {
+          method: "DELETE",
+        },
+        token
+      );
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function saveInteraction(e) {
     e.preventDefault();
 
@@ -972,7 +1235,9 @@ export default function App() {
       ) || "";
 
     if (!phone) {
-      alert("Customer phone number is missing.");
+      alert(
+        "Customer phone number is missing."
+      );
       return;
     }
 
@@ -980,9 +1245,13 @@ export default function App() {
 
     if (communicationType === "WhatsApp") {
       url = `https://wa.me/${phone}`;
-    } else if (communicationType === "Call") {
+    } else if (
+      communicationType === "Call"
+    ) {
       url = `tel:${phone}`;
-    } else if (communicationType === "SMS") {
+    } else if (
+      communicationType === "SMS"
+    ) {
       url = `sms:${phone}`;
     }
 
@@ -1060,10 +1329,41 @@ export default function App() {
     );
   }, [deals, dealSearch]);
 
+  const filteredTasks = useMemo(() => {
+    const q =
+      taskSearch.trim().toLowerCase();
+
+    if (!q) return tasks;
+
+    return tasks.filter((task) => {
+      const customerName =
+        task.customerId &&
+        typeof task.customerId === "object"
+          ? task.customerId.name
+          : "";
+
+      return [
+        task.title,
+        task.description,
+        task.status,
+        task.priority,
+        customerName,
+      ]
+        .filter(Boolean)
+        .some((value) =>
+          String(value)
+            .toLowerCase()
+            .includes(q)
+        );
+    });
+  }, [tasks, taskSearch]);
+
   const revenue = useMemo(
     () =>
       deals
-        .filter((deal) => deal.status === "Won")
+        .filter(
+          (deal) => deal.status === "Won"
+        )
         .reduce(
           (total, deal) =>
             total +
@@ -1085,6 +1385,14 @@ export default function App() {
 
   const openDeals = deals.filter(
     (deal) => deal.status === "Open"
+  ).length;
+
+  const pendingTasks = tasks.filter(
+    (task) => task.status === "Pending"
+  ).length;
+
+  const completedTasks = tasks.filter(
+    (task) => task.status === "Completed"
   ).length;
 
   if (!token) {
@@ -1292,7 +1600,11 @@ export default function App() {
             <>
               <div style={styles.welcomeCard}>
                 <div>
-                  <div style={styles.welcomeEyebrow}>
+                  <div
+                    style={
+                      styles.welcomeEyebrow
+                    }
+                  >
                     CRM PRO
                   </div>
 
@@ -1333,11 +1645,17 @@ export default function App() {
                   <div style={styles.statIcon}>
                     👥
                   </div>
+
                   <div>
-                    <div style={styles.statLabel}>
+                    <div
+                      style={styles.statLabel}
+                    >
                       Total Customers
                     </div>
-                    <div style={styles.statValue}>
+
+                    <div
+                      style={styles.statValue}
+                    >
                       {customers.length}
                     </div>
                   </div>
@@ -1347,11 +1665,17 @@ export default function App() {
                   <div style={styles.statIcon}>
                     🎯
                   </div>
+
                   <div>
-                    <div style={styles.statLabel}>
+                    <div
+                      style={styles.statLabel}
+                    >
                       Total Leads
                     </div>
-                    <div style={styles.statValue}>
+
+                    <div
+                      style={styles.statValue}
+                    >
                       {leads.length}
                     </div>
                   </div>
@@ -1361,11 +1685,17 @@ export default function App() {
                   <div style={styles.statIcon}>
                     💼
                   </div>
+
                   <div>
-                    <div style={styles.statLabel}>
+                    <div
+                      style={styles.statLabel}
+                    >
                       Open Deals
                     </div>
-                    <div style={styles.statValue}>
+
+                    <div
+                      style={styles.statValue}
+                    >
                       {openDeals}
                     </div>
                   </div>
@@ -1375,15 +1705,41 @@ export default function App() {
                   <div style={styles.statIcon}>
                     💰
                   </div>
+
                   <div>
-                    <div style={styles.statLabel}>
+                    <div
+                      style={styles.statLabel}
+                    >
                       Won Revenue
                     </div>
-                    <div style={styles.statValue}>
+
+                    <div
+                      style={styles.statValue}
+                    >
                       ₹
                       {revenue.toLocaleString(
                         "en-IN"
                       )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    ✅
+                  </div>
+
+                  <div>
+                    <div
+                      style={styles.statLabel}
+                    >
+                      Pending Tasks
+                    </div>
+
+                    <div
+                      style={styles.statValue}
+                    >
+                      {pendingTasks}
                     </div>
                   </div>
                 </div>
@@ -1415,7 +1771,9 @@ export default function App() {
                       onClick={() =>
                         setPage("Leads")
                       }
-                      style={styles.secondaryButton}
+                      style={
+                        styles.secondaryButton
+                      }
                     >
                       View All
                     </button>
@@ -1436,7 +1794,9 @@ export default function App() {
                         .map((lead) => (
                           <div
                             key={lead._id}
-                            style={styles.listItem}
+                            style={
+                              styles.listItem
+                            }
                           >
                             <div
                               style={
@@ -1444,8 +1804,7 @@ export default function App() {
                               }
                             >
                               {(
-                                lead.name ||
-                                "L"
+                                lead.name || "L"
                               )
                                 .charAt(0)
                                 .toUpperCase()}
@@ -1506,7 +1865,9 @@ export default function App() {
                     <button
                       type="button"
                       onClick={openAddCustomer}
-                      style={styles.quickButton}
+                      style={
+                        styles.quickButton
+                      }
                     >
                       <span>👥</span>
                       <strong>
@@ -1517,7 +1878,9 @@ export default function App() {
                     <button
                       type="button"
                       onClick={openAddLead}
-                      style={styles.quickButton}
+                      style={
+                        styles.quickButton
+                      }
                     >
                       <span>🎯</span>
                       <strong>Add Lead</strong>
@@ -1526,7 +1889,9 @@ export default function App() {
                     <button
                       type="button"
                       onClick={openAddDeal}
-                      style={styles.quickButton}
+                      style={
+                        styles.quickButton
+                      }
                     >
                       <span>💼</span>
                       <strong>Add Deal</strong>
@@ -1534,20 +1899,13 @@ export default function App() {
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setInteractionForm({
-                          ...emptyInteraction,
-                        });
-                        setShowInteractionModal(
-                          true
-                        );
-                      }}
-                      style={styles.quickButton}
+                      onClick={openAddTask}
+                      style={
+                        styles.quickButton
+                      }
                     >
-                      <span>💬</span>
-                      <strong>
-                        Add Interaction
-                      </strong>
+                      <span>✅</span>
+                      <strong>Add Task</strong>
                     </button>
                   </div>
                 </div>
@@ -1563,7 +1921,9 @@ export default function App() {
                     Customers
                   </h2>
 
-                  <p style={styles.panelSubtitle}>
+                  <p
+                    style={styles.panelSubtitle}
+                  >
                     Manage all your customers
                   </p>
                 </div>
@@ -1646,11 +2006,11 @@ export default function App() {
                     <tbody>
                       {filteredCustomers.map(
                         (customer) => (
-                          <tr key={customer._id}>
+                          <tr
+                            key={customer._id}
+                          >
                             <td
-                              style={
-                                styles.td
-                              }
+                              style={styles.td}
                             >
                               <div
                                 style={
@@ -1678,22 +2038,30 @@ export default function App() {
                               </div>
                             </td>
 
-                            <td style={styles.td}>
+                            <td
+                              style={styles.td}
+                            >
                               {customer.phone ||
                                 "—"}
                             </td>
 
-                            <td style={styles.td}>
+                            <td
+                              style={styles.td}
+                            >
                               {customer.email ||
                                 "—"}
                             </td>
 
-                            <td style={styles.td}>
+                            <td
+                              style={styles.td}
+                            >
                               {customer.company ||
                                 "—"}
                             </td>
 
-                            <td style={styles.td}>
+                            <td
+                              style={styles.td}
+                            >
                               <div
                                 style={
                                   styles.actionRow
@@ -1737,7 +2105,8 @@ export default function App() {
                                   }
                                   style={{
                                     ...styles.smallAction,
-                                    color: "#dc2626",
+                                    color:
+                                      "#dc2626",
                                   }}
                                 >
                                   🗑️
@@ -1762,7 +2131,9 @@ export default function App() {
                     Leads
                   </h2>
 
-                  <p style={styles.panelSubtitle}>
+                  <p
+                    style={styles.panelSubtitle}
+                  >
                     Capture and manage leads from
                     Facebook, Instagram, WhatsApp,
                     Google and other sources.
@@ -1977,7 +2348,8 @@ export default function App() {
                                   }
                                   style={{
                                     ...styles.smallAction,
-                                    color: "#dc2626",
+                                    color:
+                                      "#dc2626",
                                   }}
                                 >
                                   🗑️
@@ -2002,7 +2374,9 @@ export default function App() {
                     Deals
                   </h2>
 
-                  <p style={styles.panelSubtitle}>
+                  <p
+                    style={styles.panelSubtitle}
+                  >
                     Manage sales opportunities.
                   </p>
                 </div>
@@ -2122,7 +2496,8 @@ export default function App() {
                               >
                                 ₹
                                 {Number(
-                                  deal.amount || 0
+                                  deal.amount ||
+                                    0
                                 ).toLocaleString(
                                   "en-IN"
                                 )}
@@ -2194,20 +2569,259 @@ export default function App() {
 
           {page === "Tasks" && (
             <div style={styles.panel}>
-              <div style={styles.placeholder}>
-                <div style={styles.placeholderIcon}>
-                  ✅
+              <div style={styles.panelHeader}>
+                <div>
+                  <h2 style={styles.panelTitle}>
+                    Tasks
+                  </h2>
+
+                  <p
+                    style={styles.panelSubtitle}
+                  >
+                    Manage follow-ups, work and
+                    customer tasks.
+                  </p>
                 </div>
 
-                <h2>Tasks</h2>
-
-                <p>
-                  Task management section is ready.
-                  You can add the full Task CRUD
-                  module when the task backend
-                  routes are added.
-                </p>
+                <button
+                  type="button"
+                  onClick={openAddTask}
+                  style={styles.primaryButton}
+                >
+                  + Add Task
+                </button>
               </div>
+
+              <div style={styles.taskSummary}>
+                <div style={styles.miniStat}>
+                  <span>All Tasks</span>
+                  <strong>
+                    {tasks.length}
+                  </strong>
+                </div>
+
+                <div style={styles.miniStat}>
+                  <span>Pending</span>
+                  <strong>
+                    {pendingTasks}
+                  </strong>
+                </div>
+
+                <div style={styles.miniStat}>
+                  <span>Completed</span>
+                  <strong>
+                    {completedTasks}
+                  </strong>
+                </div>
+              </div>
+
+              <div style={styles.toolbar}>
+                <input
+                  type="search"
+                  placeholder="Search tasks..."
+                  value={taskSearch}
+                  onChange={(e) =>
+                    setTaskSearch(
+                      e.target.value
+                    )
+                  }
+                  style={{
+                    ...styles.searchInput,
+                    background: darkMode
+                      ? "#0f172a"
+                      : "#ffffff",
+                    color: darkMode
+                      ? "#f8fafc"
+                      : "#0f172a",
+                  }}
+                />
+              </div>
+
+              {filteredTasks.length === 0 ? (
+                <EmptyState
+                  icon="✅"
+                  title="No tasks found"
+                  text={
+                    taskSearch
+                      ? "Try another search."
+                      : "Create your first task."
+                  }
+                  button={
+                    taskSearch
+                      ? null
+                      : "+ Add Task"
+                  }
+                  onClick={
+                    taskSearch
+                      ? null
+                      : openAddTask
+                  }
+                />
+              ) : (
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>
+                          Task
+                        </th>
+
+                        <th style={styles.th}>
+                          Customer
+                        </th>
+
+                        <th style={styles.th}>
+                          Priority
+                        </th>
+
+                        <th style={styles.th}>
+                          Status
+                        </th>
+
+                        <th style={styles.th}>
+                          Due Date
+                        </th>
+
+                        <th style={styles.th}>
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {filteredTasks.map(
+                        (task) => {
+                          const customer =
+                            task.customerId &&
+                            typeof task.customerId ===
+                              "object"
+                              ? task.customerId
+                              : customers.find(
+                                  (c) =>
+                                    c._id ===
+                                    task.customerId
+                                );
+
+                          return (
+                            <tr key={task._id}>
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                <strong>
+                                  {task.title}
+                                </strong>
+
+                                {task.description && (
+                                  <div
+                                    style={
+                                      styles.smallText
+                                    }
+                                  >
+                                    {task.description}
+                                  </div>
+                                )}
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                {customer?.name ||
+                                  "—"}
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                <PriorityBadge
+                                  priority={
+                                    task.priority
+                                  }
+                                />
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                <StatusBadge
+                                  status={
+                                    task.status
+                                  }
+                                />
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                {task.dueDate
+                                  ? new Date(
+                                      task.dueDate
+                                    ).toLocaleDateString(
+                                      "en-IN"
+                                    )
+                                  : "—"}
+                              </td>
+
+                              <td
+                                style={
+                                  styles.td
+                                }
+                              >
+                                <div
+                                  style={
+                                    styles.actionRow
+                                  }
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openEditTask(
+                                        task
+                                      )
+                                    }
+                                    style={
+                                      styles.smallAction
+                                    }
+                                    title="Edit task"
+                                  >
+                                    ✏️
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      deleteTask(
+                                        task._id
+                                      )
+                                    }
+                                    style={{
+                                      ...styles.smallAction,
+                                      color:
+                                        "#dc2626",
+                                    }}
+                                    title="Delete task"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -2218,11 +2832,17 @@ export default function App() {
                   <div style={styles.statIcon}>
                     👥
                   </div>
+
                   <div>
-                    <div style={styles.statLabel}>
+                    <div
+                      style={styles.statLabel}
+                    >
                       Customers
                     </div>
-                    <div style={styles.statValue}>
+
+                    <div
+                      style={styles.statValue}
+                    >
                       {customers.length}
                     </div>
                   </div>
@@ -2232,11 +2852,17 @@ export default function App() {
                   <div style={styles.statIcon}>
                     🎯
                   </div>
+
                   <div>
-                    <div style={styles.statLabel}>
+                    <div
+                      style={styles.statLabel}
+                    >
                       Leads
                     </div>
-                    <div style={styles.statValue}>
+
+                    <div
+                      style={styles.statValue}
+                    >
                       {leads.length}
                     </div>
                   </div>
@@ -2246,11 +2872,17 @@ export default function App() {
                   <div style={styles.statIcon}>
                     💼
                   </div>
+
                   <div>
-                    <div style={styles.statLabel}>
+                    <div
+                      style={styles.statLabel}
+                    >
                       Deals
                     </div>
-                    <div style={styles.statValue}>
+
+                    <div
+                      style={styles.statValue}
+                    >
                       {deals.length}
                     </div>
                   </div>
@@ -2260,11 +2892,17 @@ export default function App() {
                   <div style={styles.statIcon}>
                     💰
                   </div>
+
                   <div>
-                    <div style={styles.statLabel}>
+                    <div
+                      style={styles.statLabel}
+                    >
                       Revenue
                     </div>
-                    <div style={styles.statValue}>
+
+                    <div
+                      style={styles.statValue}
+                    >
                       ₹
                       {revenue.toLocaleString(
                         "en-IN"
@@ -2366,8 +3004,7 @@ export default function App() {
                         styles.panelSubtitle
                       }
                     >
-                      {currentUser?.name ||
-                        "—"}
+                      {currentUser?.name || "—"}
                     </p>
                   </div>
                 </div>
@@ -2381,8 +3018,7 @@ export default function App() {
                         styles.panelSubtitle
                       }
                     >
-                      {currentUser?.id ||
-                        "—"}
+                      {currentUser?.id || "—"}
                     </p>
                   </div>
                 </div>
@@ -2469,6 +3105,22 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+
+                <div style={styles.settingRow}>
+                  <div>
+                    <strong>
+                      Database Tasks
+                    </strong>
+
+                    <p
+                      style={
+                        styles.panelSubtitle
+                      }
+                    >
+                      {tasks.length} tasks loaded
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -2542,7 +3194,9 @@ export default function App() {
                 onClick={() =>
                   setShowCustomerModal(false)
                 }
-                style={styles.secondaryButton}
+                style={
+                  styles.secondaryButton
+                }
               >
                 Cancel
               </button>
@@ -2679,7 +3333,9 @@ export default function App() {
                 onClick={() =>
                   setShowLeadModal(false)
                 }
-                style={styles.secondaryButton}
+                style={
+                  styles.secondaryButton
+                }
               >
                 Cancel
               </button>
@@ -2800,7 +3456,9 @@ export default function App() {
                 onClick={() =>
                   setShowDealModal(false)
                 }
-                style={styles.secondaryButton}
+                style={
+                  styles.secondaryButton
+                }
               >
                 Cancel
               </button>
@@ -2815,6 +3473,144 @@ export default function App() {
                   : editingDeal
                   ? "Update Deal"
                   : "Save Deal"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showTaskModal && (
+        <Modal
+          title={
+            editingTask
+              ? "Edit Task"
+              : "Add Task"
+          }
+          onClose={() =>
+            setShowTaskModal(false)
+          }
+          width={650}
+        >
+          <form onSubmit={saveTask}>
+            <div style={styles.formGrid}>
+              <FormInput
+                label="Task Title *"
+                value={taskForm.title}
+                onChange={(value) =>
+                  setTaskForm({
+                    ...taskForm,
+                    title: value,
+                  })
+                }
+                required
+              />
+
+              <FormSelect
+                label="Customer"
+                value={taskForm.customerId}
+                onChange={(value) =>
+                  setTaskForm({
+                    ...taskForm,
+                    customerId: value,
+                  })
+                }
+                options={[
+                  {
+                    value: "",
+                    label: "No customer",
+                  },
+                  ...customers.map(
+                    (customer) => ({
+                      value: customer._id,
+                      label: customer.name,
+                    })
+                  ),
+                ]}
+              />
+
+              <FormSelect
+                label="Status"
+                value={taskForm.status}
+                onChange={(value) =>
+                  setTaskForm({
+                    ...taskForm,
+                    status: value,
+                  })
+                }
+                options={TASK_STATUSES}
+              />
+
+              <FormSelect
+                label="Priority"
+                value={taskForm.priority}
+                onChange={(value) =>
+                  setTaskForm({
+                    ...taskForm,
+                    priority: value,
+                  })
+                }
+                options={TASK_PRIORITIES}
+              />
+
+              <FormInput
+                label="Due Date"
+                type="date"
+                value={taskForm.dueDate}
+                onChange={(value) =>
+                  setTaskForm({
+                    ...taskForm,
+                    dueDate: value,
+                  })
+                }
+              />
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Description
+              </label>
+
+              <textarea
+                rows={5}
+                value={taskForm.description}
+                onChange={(e) =>
+                  setTaskForm({
+                    ...taskForm,
+                    description:
+                      e.target.value,
+                  })
+                }
+                placeholder="Task description..."
+                style={{
+                  ...styles.input,
+                  resize: "vertical",
+                }}
+              />
+            </div>
+
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowTaskModal(false)
+                }
+                style={
+                  styles.secondaryButton
+                }
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={savingTask}
+                style={styles.primaryButton}
+              >
+                {savingTask
+                  ? "Saving..."
+                  : editingTask
+                  ? "Update Task"
+                  : "Save Task"}
               </button>
             </div>
           </form>
@@ -2886,7 +3682,8 @@ export default function App() {
                 onChange={(e) =>
                   setInteractionForm({
                     ...interactionForm,
-                    message: e.target.value,
+                    message:
+                      e.target.value,
                   })
                 }
                 style={{
@@ -2905,7 +3702,9 @@ export default function App() {
                     false
                   )
                 }
-                style={styles.secondaryButton}
+                style={
+                  styles.secondaryButton
+                }
               >
                 Cancel
               </button>
@@ -2974,7 +3773,9 @@ export default function App() {
                     false
                   )
                 }
-                style={styles.secondaryButton}
+                style={
+                  styles.secondaryButton
+                }
               >
                 Cancel
               </button>
@@ -3385,7 +4186,8 @@ const styles = {
     alignItems: "center",
     gap: 11,
     padding: "11px 0",
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom:
+      "1px solid #f1f5f9",
   },
 
   listAvatar: {
@@ -3459,12 +4261,14 @@ const styles = {
     color: "#64748b",
     fontSize: 12,
     fontWeight: 800,
-    borderBottom: "1px solid #e2e8f0",
+    borderBottom:
+      "1px solid #e2e8f0",
   },
 
   td: {
     padding: "13px 10px",
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom:
+      "1px solid #f1f5f9",
     fontSize: 13,
   },
 
@@ -3485,7 +4289,8 @@ const styles = {
     width: 34,
     height: 34,
     borderRadius: 8,
-    border: "1px solid #e2e8f0",
+    border:
+      "1px solid #e2e8f0",
     background: "#fff",
     cursor: "pointer",
   },
@@ -3509,8 +4314,17 @@ const styles = {
     marginBottom: 18,
   },
 
+  taskSummary: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(130px, 1fr))",
+    gap: 10,
+    marginBottom: 18,
+  },
+
   miniStat: {
-    border: "1px solid #e2e8f0",
+    border:
+      "1px solid #e2e8f0",
     borderRadius: 10,
     padding: 13,
     background: "#f8fafc",
@@ -3538,22 +4352,8 @@ const styles = {
     alignItems: "center",
     gap: 15,
     padding: "15px 0",
-    borderBottom: "1px solid #e2e8f0",
-  },
-
-  placeholder: {
-    minHeight: 330,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    textAlign: "center",
-    color: "#64748b",
-  },
-
-  placeholderIcon: {
-    fontSize: 48,
-    marginBottom: 10,
+    borderBottom:
+      "1px solid #e2e8f0",
   },
 
   emptyState: {
@@ -3577,7 +4377,8 @@ const styles = {
   overlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(15, 23, 42, 0.55)",
+    background:
+      "rgba(15, 23, 42, 0.55)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -3643,7 +4444,8 @@ const styles = {
     width: "100%",
     boxSizing: "border-box",
     padding: "11px 12px",
-    border: "1px solid #cbd5e1",
+    border:
+      "1px solid #cbd5e1",
     borderRadius: 9,
     outline: "none",
     fontSize: 14,
@@ -3673,7 +4475,8 @@ const styles = {
     padding: "11px 14px",
     background: "#fee2e2",
     color: "#991b1b",
-    border: "1px solid #fecaca",
+    border:
+      "1px solid #fecaca",
     borderRadius: 9,
     display: "flex",
     justifyContent: "space-between",
@@ -3750,7 +4553,8 @@ const styles = {
     padding: "10px 12px",
     background: "#fee2e2",
     color: "#991b1b",
-    border: "1px solid #fecaca",
+    border:
+      "1px solid #fecaca",
     borderRadius: 8,
     fontSize: 13,
     marginBottom: 15,
@@ -3778,3 +4582,4 @@ const styles = {
     marginTop: 15,
   },
 };
+```
