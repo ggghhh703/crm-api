@@ -1,4 +1,3 @@
-```jsx
 import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL = "https://crm-api-408i.onrender.com";
@@ -17,81 +16,9 @@ const PLATFORMS = [
   "Other",
 ];
 
-const LEAD_STATUSES = [
-  "New",
-  "Contacted",
-  "Converted",
-  "Closed",
-];
-
-const DEAL_STATUSES = [
-  "Open",
-  "Won",
-  "Lost",
-];
-
-const TASK_STATUSES = [
-  "Pending",
-  "In Progress",
-  "Completed",
-];
-
-const TASK_PRIORITIES = [
-  "Low",
-  "Medium",
-  "High",
-];
-
-const emptyCustomer = {
-  name: "",
-  email: "",
-  phone: "",
-  company: "",
-};
-
-const emptyLead = {
-  name: "",
-  phone: "",
-  email: "",
-  message: "",
-  platform: "Other",
-  externalLeadId: "",
-  status: "New",
-};
-
-const emptyDeal = {
-  title: "",
-  customerId: "",
-  amount: "",
-  status: "Open",
-  notes: "",
-};
-
-const emptyInteraction = {
-  customerId: "",
-  type: "Call",
-  message: "",
-};
-
-const emptyTask = {
-  title: "",
-  description: "",
-  customerId: "",
-  status: "Pending",
-  priority: "Medium",
-  dueDate: "",
-};
-
-function getArray(data, key) {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.[key])) return data[key];
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.data?.[key])) {
-    return data.data[key];
-  }
-
-  return [];
-}
+const LEAD_STATUSES = ["New", "Contacted", "Converted", "Closed"];
+const TASK_STATUSES = ["Pending", "In Progress", "Completed"];
+const PRIORITIES = ["Low", "Medium", "High"];
 
 async function api(path, options = {}, token = "") {
   const headers = {
@@ -108,31 +35,57 @@ async function api(path, options = {}, token = "") {
     headers,
   });
 
+  const text = await response.text();
+
   let data = {};
 
   try {
-    data = await response.json();
+    data = text ? JSON.parse(text) : {};
   } catch {
-    data = {};
+    data = {
+      success: response.ok,
+      message: text || "Invalid server response",
+    };
   }
 
   if (!response.ok) {
     throw new Error(
-      data.message ||
-        data.error ||
-        `Request failed (${response.status})`
+      data.message || `Request failed with status ${response.status}`
     );
   }
 
   return data;
 }
 
-function Modal({
-  title,
-  onClose,
-  children,
-  width = 560,
-}) {
+function getArray(data, key) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.[key])) return data[key];
+  return [];
+}
+
+function formatDate(value) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleDateString("en-IN");
+}
+
+function getCustomerName(customerId, customers) {
+  if (!customerId) return "—";
+
+  if (typeof customerId === "object") {
+    return customerId.name || "—";
+  }
+
+  return (
+    customers.find((customer) => customer._id === customerId)?.name || "—"
+  );
+}
+
+function Modal({ title, onClose, children, width = 600 }) {
   return (
     <div style={styles.overlay}>
       <div
@@ -153,44 +106,97 @@ function Modal({
           </button>
         </div>
 
-        {children}
+        <div style={styles.modalBody}>{children}</div>
       </div>
     </div>
   );
 }
 
+function FormInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  required = false,
+}) {
+  return (
+    <div style={styles.formGroup}>
+      <label style={styles.label}>
+        {label}
+        {required ? " *" : ""}
+      </label>
+
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        style={styles.input}
+      />
+    </div>
+  );
+}
+
+function FormSelect({
+  label,
+  value,
+  onChange,
+  options,
+  required = false,
+}) {
+  return (
+    <div style={styles.formGroup}>
+      <label style={styles.label}>
+        {label}
+        {required ? " *" : ""}
+      </label>
+
+      <select
+        value={value}
+        onChange={onChange}
+        required={required}
+        style={styles.input}
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function StatusBadge({ status }) {
-  let background = "#eef2ff";
-  let color = "#4338ca";
+  let background = "#e2e8f0";
+  let color = "#334155";
 
   if (
-    status === "Won" ||
-    status === "Converted" ||
-    status === "Completed"
+    status === "Completed" ||
+    status === "Converted"
   ) {
     background = "#dcfce7";
     color = "#166534";
   }
 
   if (
-    status === "Lost" ||
-    status === "Closed"
+    status === "In Progress" ||
+    status === "Contacted"
   ) {
-    background = "#fee2e2";
-    color = "#991b1b";
+    background = "#dbeafe";
+    color = "#1d4ed8";
   }
 
-  if (
-    status === "Contacted" ||
-    status === "In Progress"
-  ) {
+  if (status === "Pending" || status === "New") {
     background = "#fef3c7";
     color = "#92400e";
   }
 
-  if (status === "Pending") {
-    background = "#dbeafe";
-    color = "#1d4ed8";
+  if (status === "Closed") {
+    background = "#fee2e2";
+    color = "#991b1b";
   }
 
   return (
@@ -207,8 +213,8 @@ function StatusBadge({ status }) {
 }
 
 function PriorityBadge({ priority }) {
-  let background = "#f1f5f9";
-  let color = "#475569";
+  let background = "#e2e8f0";
+  let color = "#334155";
 
   if (priority === "High") {
     background = "#fee2e2";
@@ -238,127 +244,135 @@ function PriorityBadge({ priority }) {
   );
 }
 
-function AuthScreen({
-  authMode,
-  setAuthMode,
-  authForm,
-  setAuthForm,
-  handleAuth,
-  authLoading,
-  authError,
-}) {
-  const isLogin = authMode === "login";
+function EmptyState({ icon, title, text, button, onClick }) {
+  return (
+    <div style={styles.emptyState}>
+      <div style={styles.emptyIcon}>{icon}</div>
+
+      <h3 style={styles.emptyTitle}>{title}</h3>
+
+      <p style={styles.emptyText}>{text}</p>
+
+      {button && (
+        <button
+          type="button"
+          onClick={onClick}
+          style={styles.primaryButton}
+        >
+          {button}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AuthScreen({ onLogin }) {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await api(
+        mode === "login" ? "/auth/login" : "/auth/signup",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: name.trim(),
+            password,
+          }),
+        }
+      );
+
+      if (!data.token) {
+        throw new Error("Authentication token was not received");
+      }
+
+      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(
+        USER_KEY,
+        JSON.stringify(data.user || { name: name.trim() })
+      );
+
+      onLogin(data.token, data.user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div style={styles.authPage}>
       <div style={styles.authCard}>
-        <div style={styles.authLogo}>🚀</div>
+        <div style={styles.logoCircle}>🚀</div>
 
         <h1 style={styles.authTitle}>CRM Pro</h1>
 
         <p style={styles.authSubtitle}>
-          {isLogin
+          {mode === "login"
             ? "Login to your CRM"
             : "Create your CRM account"}
         </p>
 
-        {authError && (
-          <div style={styles.errorBox}>
-            {authError}
-          </div>
+        {error && (
+          <div style={styles.errorBox}>{error}</div>
         )}
 
-        <form onSubmit={handleAuth}>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>ID</label>
+        <form onSubmit={submit}>
+          <FormInput
+            label="ID"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter your ID"
+            required
+          />
 
-            <input
-              type="text"
-              required
-              minLength={3}
-              maxLength={30}
-              autoComplete="username"
-              placeholder="Enter your ID"
-              value={authForm.name}
-              onChange={(e) =>
-                setAuthForm({
-                  ...authForm,
-                  name: e.target.value,
-                })
-              }
-              style={styles.input}
-            />
-          </div>
-
-          <div style={styles.formGroup}>
-            <label style={styles.label}>
-              Password
-            </label>
-
-            <input
-              type="password"
-              required
-              minLength={6}
-              autoComplete={
-                isLogin
-                  ? "current-password"
-                  : "new-password"
-              }
-              placeholder="Enter your password"
-              value={authForm.password}
-              onChange={(e) =>
-                setAuthForm({
-                  ...authForm,
-                  password: e.target.value,
-                })
-              }
-              style={styles.input}
-            />
-          </div>
+          <FormInput
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            type="password"
+            required
+          />
 
           <button
             type="submit"
-            disabled={authLoading}
+            disabled={loading}
             style={{
               ...styles.primaryButton,
               width: "100%",
-              opacity: authLoading ? 0.7 : 1,
+              marginTop: 8,
             }}
           >
-            {authLoading
+            {loading
               ? "Please wait..."
-              : isLogin
+              : mode === "login"
               ? "Login"
               : "Create Account"}
           </button>
         </form>
 
-        <div style={styles.authSwitch}>
-          {isLogin
-            ? "Don't have an account?"
-            : "Already have an account?"}
-
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode(
-                isLogin ? "signup" : "login"
-              );
-
-              setAuthForm({
-                name: "",
-                password: "",
-              });
-            }}
-            style={styles.linkButton}
-          >
-            {isLogin ? " Sign Up" : " Login"}
-          </button>
-        </div>
-
-        <p style={styles.authNote}>
-          Login uses ID and password only.
-        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setMode(mode === "login" ? "signup" : "login");
+            setError("");
+          }}
+          style={styles.linkButton}
+        >
+          {mode === "login"
+            ? "Create a new account"
+            : "Already have an account? Login"}
+        </button>
       </div>
     </div>
   );
@@ -369,192 +383,108 @@ export default function App() {
     () => localStorage.getItem(TOKEN_KEY) || ""
   );
 
-  const [currentUser, setCurrentUser] =
-    useState(() => {
-      try {
-        return JSON.parse(
-          localStorage.getItem(USER_KEY) || "null"
-        );
-      } catch {
-        return null;
-      }
-    });
-
-  const [authMode, setAuthMode] =
-    useState("login");
-
-  const [authForm, setAuthForm] = useState({
-    name: "",
-    password: "",
+  const [user, setUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(USER_KEY) || "null");
+    } catch {
+      return null;
+    }
   });
 
-  const [authLoading, setAuthLoading] =
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem(THEME_KEY) === "true"
+  );
+
+  const [page, setPage] = useState("Dashboard");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const [customers, setCustomers] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [deals, setDeals] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [interactions, setInteractions] = useState([]);
+
+  const [search, setSearch] = useState("");
+  const [leadSearch, setLeadSearch] = useState("");
+  const [dealSearch, setDealSearch] = useState("");
+  const [taskSearch, setTaskSearch] = useState("");
+
+  const [showCustomerModal, setShowCustomerModal] =
     useState(false);
 
-  const [authError, setAuthError] =
-    useState("");
-
-  const [darkMode, setDarkMode] =
-    useState(
-      () =>
-        localStorage.getItem(THEME_KEY) ===
-        "true"
-    );
-
-  const [page, setPage] =
-    useState("Dashboard");
-
-  const [customers, setCustomers] =
-    useState([]);
-
-  const [leads, setLeads] =
-    useState([]);
-
-  const [deals, setDeals] =
-    useState([]);
-
-  const [interactions, setInteractions] =
-    useState([]);
-
-  const [tasks, setTasks] =
-    useState([]);
-
-  const [loading, setLoading] =
+  const [showLeadModal, setShowLeadModal] =
     useState(false);
 
-  const [leadLoading, setLeadLoading] =
+  const [showDealModal, setShowDealModal] =
     useState(false);
 
-  const [error, setError] =
-    useState("");
+  const [showTaskModal, setShowTaskModal] =
+    useState(false);
 
-  const [customerSearch, setCustomerSearch] =
-    useState("");
+  const [showInteractionModal, setShowInteractionModal] =
+    useState(false);
 
-  const [leadSearch, setLeadSearch] =
-    useState("");
+  const [editingCustomer, setEditingCustomer] =
+    useState(null);
 
-  const [dealSearch, setDealSearch] =
-    useState("");
+  const [editingLead, setEditingLead] =
+    useState(null);
 
-  const [taskSearch, setTaskSearch] =
-    useState("");
+  const [editingDeal, setEditingDeal] =
+    useState(null);
 
-  const [
-    showCustomerModal,
-    setShowCustomerModal,
-  ] = useState(false);
+  const [editingTask, setEditingTask] =
+    useState(null);
 
-  const [
-    showLeadModal,
-    setShowLeadModal,
-  ] = useState(false);
+  const [editingInteraction, setEditingInteraction] =
+    useState(null);
 
-  const [
-    showDealModal,
-    setShowDealModal,
-  ] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savingTask, setSavingTask] = useState(false);
 
-  const [
-    showInteractionModal,
-    setShowInteractionModal,
-  ] = useState(false);
+  const [customerForm, setCustomerForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    company: "",
+  });
 
-  const [
-    showTaskModal,
-    setShowTaskModal,
-  ] = useState(false);
+  const [leadForm, setLeadForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    message: "",
+    platform: "Other",
+    externalLeadId: "",
+    status: "New",
+  });
 
-  const [
-    editingCustomer,
-    setEditingCustomer,
-  ] = useState(null);
+  const [dealForm, setDealForm] = useState({
+    title: "",
+    customerId: "",
+    amount: "",
+    stage: "New",
+    status: "Open",
+  });
 
-  const [
-    editingLead,
-    setEditingLead,
-  ] = useState(null);
+  const [taskForm, setTaskForm] = useState({
+    title: "",
+    description: "",
+    customerId: "",
+    status: "Pending",
+    priority: "Medium",
+    dueDate: "",
+  });
 
-  const [
-    editingDeal,
-    setEditingDeal,
-  ] = useState(null);
-
-  const [
-    editingTask,
-    setEditingTask,
-  ] = useState(null);
-
-  const [
-    customerForm,
-    setCustomerForm,
-  ] = useState(emptyCustomer);
-
-  const [
-    leadForm,
-    setLeadForm,
-  ] = useState(emptyLead);
-
-  const [
-    dealForm,
-    setDealForm,
-  ] = useState(emptyDeal);
-
-  const [
-    interactionForm,
-    setInteractionForm,
-  ] = useState(emptyInteraction);
-
-  const [
-    taskForm,
-    setTaskForm,
-  ] = useState(emptyTask);
-
-  const [
-    savingCustomer,
-    setSavingCustomer,
-  ] = useState(false);
-
-  const [
-    savingLead,
-    setSavingLead,
-  ] = useState(false);
-
-  const [
-    savingDeal,
-    setSavingDeal,
-  ] = useState(false);
-
-  const [
-    savingInteraction,
-    setSavingInteraction,
-  ] = useState(false);
-
-  const [
-    savingTask,
-    setSavingTask,
-  ] = useState(false);
-
-  const [
-    showCommunicationModal,
-    setShowCommunicationModal,
-  ] = useState(false);
-
-  const [
-    communicationCustomer,
-    setCommunicationCustomer,
-  ] = useState(null);
-
-  const [
-    communicationType,
-    setCommunicationType,
-  ] = useState("WhatsApp");
+  const [interactionForm, setInteractionForm] = useState({
+    customerId: "",
+    type: "Call",
+    notes: "",
+  });
 
   useEffect(() => {
-    localStorage.setItem(
-      THEME_KEY,
-      String(darkMode)
-    );
+    localStorage.setItem(THEME_KEY, String(darkMode));
   }, [darkMode]);
 
   useEffect(() => {
@@ -564,54 +494,61 @@ export default function App() {
   }, [token]);
 
   async function loadAll() {
+    if (!token) return;
+
     setLoading(true);
     setError("");
 
     try {
-      const [
-        customerData,
-        dealData,
-        leadData,
-        taskData,
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         api("/customers", {}, token),
-        api("/deals", {}, token),
         api("/leads", {}, token),
+        api("/deals", {}, token),
         api("/tasks", {}, token),
+        api("/interactions", {}, token),
       ]);
 
-      setCustomers(
-        getArray(customerData, "customers")
-      );
+      const [
+        customerResult,
+        leadResult,
+        dealResult,
+        taskResult,
+        interactionResult,
+      ] = results;
 
-      setDeals(
-        getArray(dealData, "deals")
-      );
+      if (customerResult.status === "fulfilled") {
+        setCustomers(
+          getArray(customerResult.value, "customers")
+        );
+      }
 
-      setLeads(
-        getArray(leadData, "leads")
-      );
+      if (leadResult.status === "fulfilled") {
+        setLeads(getArray(leadResult.value, "leads"));
+      }
 
-      setTasks(
-        getArray(taskData, "tasks")
-      );
+      if (dealResult.status === "fulfilled") {
+        setDeals(getArray(dealResult.value, "deals"));
+      }
 
-      try {
-        const interactionData =
-          await api(
-            "/interactions",
-            {},
-            token
-          );
+      if (taskResult.status === "fulfilled") {
+        setTasks(getArray(taskResult.value, "tasks"));
+      }
 
+      if (interactionResult.status === "fulfilled") {
         setInteractions(
           getArray(
-            interactionData,
+            interactionResult.value,
             "interactions"
           )
         );
-      } catch {
-        setInteractions([]);
+      }
+
+      const rejected = results.find(
+        (item) => item.status === "rejected"
+      );
+
+      if (rejected) {
+        setError(rejected.reason?.message || "");
       }
     } catch (err) {
       setError(err.message);
@@ -620,90 +557,27 @@ export default function App() {
     }
   }
 
-  async function handleAuth(e) {
-    e.preventDefault();
-
-    setAuthLoading(true);
-    setAuthError("");
-
-    try {
-      const endpoint =
-        authMode === "login"
-          ? "/auth/login"
-          : "/auth/register";
-
-      const body = {
-        name: authForm.name.trim(),
-        password: authForm.password,
-      };
-
-      const data = await api(endpoint, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-
-      const receivedToken =
-        data.token || data.accessToken;
-
-      if (!receivedToken) {
-        throw new Error(
-          "Authentication token not received"
-        );
-      }
-
-      const user =
-        data.user || {
-          id: "",
-          name: authForm.name.trim(),
-        };
-
-      localStorage.setItem(
-        TOKEN_KEY,
-        receivedToken
-      );
-
-      localStorage.setItem(
-        USER_KEY,
-        JSON.stringify(user)
-      );
-
-      setToken(receivedToken);
-      setCurrentUser(user);
-
-      setAuthForm({
-        name: "",
-        password: "",
-      });
-    } catch (err) {
-      setAuthError(err.message);
-    } finally {
-      setAuthLoading(false);
-    }
-  }
-
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
 
     setToken("");
-    setCurrentUser(null);
-
+    setUser(null);
     setCustomers([]);
     setLeads([]);
     setDeals([]);
-    setInteractions([]);
     setTasks([]);
-
-    setPage("Dashboard");
-    setAuthMode("login");
-    setAuthError("");
+    setInteractions([]);
   }
 
   function openAddCustomer() {
     setEditingCustomer(null);
 
     setCustomerForm({
-      ...emptyCustomer,
+      name: "",
+      phone: "",
+      email: "",
+      company: "",
     });
 
     setShowCustomerModal(true);
@@ -714,8 +588,8 @@ export default function App() {
 
     setCustomerForm({
       name: customer.name || "",
-      email: customer.email || "",
       phone: customer.phone || "",
+      email: customer.email || "",
       company: customer.company || "",
     });
 
@@ -725,20 +599,20 @@ export default function App() {
   async function saveCustomer(e) {
     e.preventDefault();
 
-    setSavingCustomer(true);
+    setSaving(true);
     setError("");
 
     try {
       const payload = {
         name: customerForm.name.trim(),
-        email: customerForm.email.trim(),
         phone: customerForm.phone.trim(),
+        email: customerForm.email.trim(),
         company: customerForm.company.trim(),
       };
 
       if (!payload.name || !payload.phone) {
         throw new Error(
-          "Name and phone are required"
+          "Customer name and phone are required"
         );
       }
 
@@ -765,24 +639,16 @@ export default function App() {
       setShowCustomerModal(false);
       setEditingCustomer(null);
 
-      setCustomerForm({
-        ...emptyCustomer,
-      });
-
       await loadAll();
     } catch (err) {
       setError(err.message);
     } finally {
-      setSavingCustomer(false);
+      setSaving(false);
     }
   }
 
   async function deleteCustomer(id) {
-    if (
-      !window.confirm(
-        "Delete this customer?"
-      )
-    ) {
+    if (!window.confirm("Delete this customer?")) {
       return;
     }
 
@@ -805,7 +671,13 @@ export default function App() {
     setEditingLead(null);
 
     setLeadForm({
-      ...emptyLead,
+      name: "",
+      phone: "",
+      email: "",
+      message: "",
+      platform: "Other",
+      externalLeadId: "",
+      status: "New",
     });
 
     setShowLeadModal(true);
@@ -820,8 +692,7 @@ export default function App() {
       email: lead.email || "",
       message: lead.message || "",
       platform: lead.platform || "Other",
-      externalLeadId:
-        lead.externalLeadId || "",
+      externalLeadId: lead.externalLeadId || "",
       status: lead.status || "New",
     });
 
@@ -831,7 +702,7 @@ export default function App() {
   async function saveLead(e) {
     e.preventDefault();
 
-    setSavingLead(true);
+    setSaving(true);
     setError("");
 
     try {
@@ -875,24 +746,16 @@ export default function App() {
       setShowLeadModal(false);
       setEditingLead(null);
 
-      setLeadForm({
-        ...emptyLead,
-      });
-
       await loadAll();
     } catch (err) {
       setError(err.message);
     } finally {
-      setSavingLead(false);
+      setSaving(false);
     }
   }
 
   async function deleteLead(id) {
-    if (
-      !window.confirm(
-        "Delete this lead?"
-      )
-    ) {
+    if (!window.confirm("Delete this lead?")) {
       return;
     }
 
@@ -912,19 +775,13 @@ export default function App() {
   }
 
   async function convertLead(lead) {
-    if (lead.convertedToCustomer) {
-      return;
-    }
-
     if (
       !window.confirm(
-        "Convert this lead into a customer?"
+        `Convert "${lead.name}" into a customer?`
       )
     ) {
       return;
     }
-
-    setLeadLoading(true);
 
     try {
       await api(
@@ -938,8 +795,6 @@ export default function App() {
       await loadAll();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setLeadLoading(false);
     }
   }
 
@@ -947,7 +802,11 @@ export default function App() {
     setEditingDeal(null);
 
     setDealForm({
-      ...emptyDeal,
+      title: "",
+      customerId: "",
+      amount: "",
+      stage: "New",
+      status: "Open",
     });
 
     setShowDealModal(true);
@@ -957,17 +816,17 @@ export default function App() {
     setEditingDeal(deal);
 
     setDealForm({
-      title: deal.title || "",
+      title: deal.title || deal.name || "",
       customerId:
-        deal.customerId?._id ||
-        deal.customerId ||
-        "",
+        typeof deal.customerId === "object"
+          ? deal.customerId?._id || ""
+          : deal.customerId || "",
       amount:
-        deal.amount !== undefined
+        deal.amount !== undefined && deal.amount !== null
           ? String(deal.amount)
           : "",
+      stage: deal.stage || "New",
       status: deal.status || "Open",
-      notes: deal.notes || "",
     });
 
     setShowDealModal(true);
@@ -976,24 +835,20 @@ export default function App() {
   async function saveDeal(e) {
     e.preventDefault();
 
-    setSavingDeal(true);
+    setSaving(true);
     setError("");
 
     try {
       const payload = {
         title: dealForm.title.trim(),
-        customerId:
-          dealForm.customerId || null,
-        amount:
-          Number(dealForm.amount) || 0,
+        customerId: dealForm.customerId || null,
+        amount: Number(dealForm.amount || 0),
+        stage: dealForm.stage,
         status: dealForm.status,
-        notes: dealForm.notes.trim(),
       };
 
       if (!payload.title) {
-        throw new Error(
-          "Deal title is required"
-        );
+        throw new Error("Deal title is required");
       }
 
       if (editingDeal) {
@@ -1019,24 +874,16 @@ export default function App() {
       setShowDealModal(false);
       setEditingDeal(null);
 
-      setDealForm({
-        ...emptyDeal,
-      });
-
       await loadAll();
     } catch (err) {
       setError(err.message);
     } finally {
-      setSavingDeal(false);
+      setSaving(false);
     }
   }
 
   async function deleteDeal(id) {
-    if (
-      !window.confirm(
-        "Delete this deal?"
-      )
-    ) {
+    if (!window.confirm("Delete this deal?")) {
       return;
     }
 
@@ -1059,7 +906,12 @@ export default function App() {
     setEditingTask(null);
 
     setTaskForm({
-      ...emptyTask,
+      title: "",
+      description: "",
+      customerId: "",
+      status: "Pending",
+      priority: "Medium",
+      dueDate: "",
     });
 
     setShowTaskModal(true);
@@ -1072,13 +924,15 @@ export default function App() {
       title: task.title || "",
       description: task.description || "",
       customerId:
-        task.customerId?._id ||
-        task.customerId ||
-        "",
+        typeof task.customerId === "object"
+          ? task.customerId?._id || ""
+          : task.customerId || "",
       status: task.status || "Pending",
       priority: task.priority || "Medium",
       dueDate: task.dueDate
-        ? String(task.dueDate).slice(0, 10)
+        ? new Date(task.dueDate)
+            .toISOString()
+            .slice(0, 10)
         : "",
     });
 
@@ -1094,20 +948,15 @@ export default function App() {
     try {
       const payload = {
         title: taskForm.title.trim(),
-        description:
-          taskForm.description.trim(),
-        customerId:
-          taskForm.customerId || null,
+        description: taskForm.description.trim(),
+        customerId: taskForm.customerId || null,
         status: taskForm.status,
         priority: taskForm.priority,
-        dueDate:
-          taskForm.dueDate || null,
+        dueDate: taskForm.dueDate || null,
       };
 
       if (!payload.title) {
-        throw new Error(
-          "Task title is required"
-        );
+        throw new Error("Task title is required");
       }
 
       if (editingTask) {
@@ -1133,10 +982,6 @@ export default function App() {
       setShowTaskModal(false);
       setEditingTask(null);
 
-      setTaskForm({
-        ...emptyTask,
-      });
-
       await loadAll();
     } catch (err) {
       setError(err.message);
@@ -1146,11 +991,7 @@ export default function App() {
   }
 
   async function deleteTask(id) {
-    if (
-      !window.confirm(
-        "Delete this task?"
-      )
-    ) {
+    if (!window.confirm("Delete this task?")) {
       return;
     }
 
@@ -1169,124 +1010,122 @@ export default function App() {
     }
   }
 
+  function openAddInteraction() {
+    setEditingInteraction(null);
+
+    setInteractionForm({
+      customerId: "",
+      type: "Call",
+      notes: "",
+    });
+
+    setShowInteractionModal(true);
+  }
+
+  function openEditInteraction(interaction) {
+    setEditingInteraction(interaction);
+
+    setInteractionForm({
+      customerId:
+        typeof interaction.customerId === "object"
+          ? interaction.customerId?._id || ""
+          : interaction.customerId || "",
+      type: interaction.type || "Call",
+      notes: interaction.notes || "",
+    });
+
+    setShowInteractionModal(true);
+  }
+
   async function saveInteraction(e) {
     e.preventDefault();
 
-    setSavingInteraction(true);
+    setSaving(true);
     setError("");
 
     try {
-      if (!interactionForm.customerId) {
-        throw new Error(
-          "Please select a customer"
-        );
+      const payload = {
+        customerId: interactionForm.customerId || null,
+        type: interactionForm.type,
+        notes: interactionForm.notes.trim(),
+      };
+
+      if (!payload.customerId) {
+        throw new Error("Please select a customer");
       }
 
-      if (!interactionForm.message.trim()) {
-        throw new Error(
-          "Please enter a message"
+      if (editingInteraction) {
+        await api(
+          `/interactions/${editingInteraction._id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          },
+          token
+        );
+      } else {
+        await api(
+          "/interactions",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+          token
         );
       }
-
-      await api(
-        "/interactions",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            customerId:
-              interactionForm.customerId,
-            type: interactionForm.type,
-            message:
-              interactionForm.message.trim(),
-          }),
-        },
-        token
-      );
 
       setShowInteractionModal(false);
-
-      setInteractionForm({
-        ...emptyInteraction,
-      });
+      setEditingInteraction(null);
 
       await loadAll();
     } catch (err) {
       setError(err.message);
     } finally {
-      setSavingInteraction(false);
+      setSaving(false);
     }
   }
 
-  function openCommunication(customer) {
-    setCommunicationCustomer(customer);
-    setCommunicationType("WhatsApp");
-    setShowCommunicationModal(true);
-  }
-
-  function startCommunication() {
-    if (!communicationCustomer) {
+  async function deleteInteraction(id) {
+    if (!window.confirm("Delete this interaction?")) {
       return;
     }
 
-    const phone =
-      communicationCustomer.phone?.replace(
-        /\D/g,
-        ""
-      ) || "";
-
-    if (!phone) {
-      alert(
-        "Customer phone number is missing."
+    try {
+      await api(
+        `/interactions/${id}`,
+        {
+          method: "DELETE",
+        },
+        token
       );
-      return;
+
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
     }
-
-    let url = "";
-
-    if (communicationType === "WhatsApp") {
-      url = `https://wa.me/${phone}`;
-    } else if (
-      communicationType === "Call"
-    ) {
-      url = `tel:${phone}`;
-    } else if (
-      communicationType === "SMS"
-    ) {
-      url = `sms:${phone}`;
-    }
-
-    if (url) {
-      window.open(url, "_blank");
-    }
-
-    setShowCommunicationModal(false);
   }
 
   const filteredCustomers = useMemo(() => {
-    const q =
-      customerSearch.trim().toLowerCase();
+    const q = search.trim().toLowerCase();
 
     if (!q) return customers;
 
     return customers.filter((customer) =>
       [
         customer.name,
-        customer.email,
         customer.phone,
+        customer.email,
         customer.company,
-      ]
-        .filter(Boolean)
-        .some((value) =>
-          String(value)
-            .toLowerCase()
-            .includes(q)
-        )
+      ].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(q)
+      )
     );
-  }, [customers, customerSearch]);
+  }, [customers, search]);
 
   const filteredLeads = useMemo(() => {
-    const q =
-      leadSearch.trim().toLowerCase();
+    const q = leadSearch.trim().toLowerCase();
 
     if (!q) return leads;
 
@@ -1298,94 +1137,53 @@ export default function App() {
         lead.platform,
         lead.status,
         lead.message,
-      ]
-        .filter(Boolean)
-        .some((value) =>
-          String(value)
-            .toLowerCase()
-            .includes(q)
-        )
+      ].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(q)
+      )
     );
   }, [leads, leadSearch]);
 
   const filteredDeals = useMemo(() => {
-    const q =
-      dealSearch.trim().toLowerCase();
+    const q = dealSearch.trim().toLowerCase();
 
     if (!q) return deals;
 
     return deals.filter((deal) =>
       [
         deal.title,
+        deal.name,
+        deal.stage,
         deal.status,
-        deal.notes,
-      ]
-        .filter(Boolean)
-        .some((value) =>
-          String(value)
-            .toLowerCase()
-            .includes(q)
-        )
+        getCustomerName(deal.customerId, customers),
+      ].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(q)
+      )
     );
-  }, [deals, dealSearch]);
+  }, [deals, dealSearch, customers]);
 
   const filteredTasks = useMemo(() => {
-    const q =
-      taskSearch.trim().toLowerCase();
+    const q = taskSearch.trim().toLowerCase();
 
     if (!q) return tasks;
 
-    return tasks.filter((task) => {
-      const customerName =
-        task.customerId &&
-        typeof task.customerId === "object"
-          ? task.customerId.name
-          : "";
-
-      return [
+    return tasks.filter((task) =>
+      [
         task.title,
         task.description,
         task.status,
         task.priority,
-        customerName,
-      ]
-        .filter(Boolean)
-        .some((value) =>
-          String(value)
-            .toLowerCase()
-            .includes(q)
-        );
-    });
-  }, [tasks, taskSearch]);
-
-  const revenue = useMemo(
-    () =>
-      deals
-        .filter(
-          (deal) => deal.status === "Won"
-        )
-        .reduce(
-          (total, deal) =>
-            total +
-            (Number(deal.amount) || 0),
-          0
-        ),
-    [deals]
-  );
-
-  const newLeads = leads.filter(
-    (lead) => lead.status === "New"
-  ).length;
-
-  const convertedLeads = leads.filter(
-    (lead) =>
-      lead.status === "Converted" ||
-      lead.convertedToCustomer
-  ).length;
-
-  const openDeals = deals.filter(
-    (deal) => deal.status === "Open"
-  ).length;
+        getCustomerName(task.customerId, customers),
+      ].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(q)
+      )
+    );
+  }, [tasks, taskSearch, customers]);
 
   const pendingTasks = tasks.filter(
     (task) => task.status === "Pending"
@@ -1395,57 +1193,79 @@ export default function App() {
     (task) => task.status === "Completed"
   ).length;
 
+  const newLeads = leads.filter(
+    (lead) => lead.status === "New"
+  ).length;
+
+  const convertedLeads = leads.filter(
+    (lead) => lead.status === "Converted"
+  ).length;
+
+  const totalRevenue = deals.reduce(
+    (sum, deal) =>
+      sum + Number(deal.amount || deal.value || 0),
+    0
+  );
+
   if (!token) {
     return (
       <AuthScreen
-        authMode={authMode}
-        setAuthMode={setAuthMode}
-        authForm={authForm}
-        setAuthForm={setAuthForm}
-        handleAuth={handleAuth}
-        authLoading={authLoading}
-        authError={authError}
+        onLogin={(newToken, newUser) => {
+          setToken(newToken);
+          setUser(newUser);
+        }}
       />
     );
   }
+
+  const menu = [
+    ["Dashboard", "🏠"],
+    ["Customers", "👥"],
+    ["Leads", "🎯"],
+    ["Deals", "💼"],
+    ["Tasks", "✅"],
+    ["Interactions", "💬"],
+    ["Reports", "📊"],
+    ["Settings", "⚙️"],
+  ];
 
   return (
     <div
       style={{
         ...styles.app,
-        background: darkMode
-          ? "#0f172a"
-          : "#f8fafc",
-        color: darkMode
-          ? "#f8fafc"
-          : "#0f172a",
+        background: darkMode ? "#020617" : "#f8fafc",
+        color: darkMode ? "#f8fafc" : "#0f172a",
       }}
     >
       <aside
         style={{
           ...styles.sidebar,
-          background: darkMode
-            ? "#111827"
-            : "#ffffff",
-          borderColor: darkMode
-            ? "#1f2937"
-            : "#e5e7eb",
+          background: darkMode ? "#0f172a" : "#ffffff",
+          borderColor: darkMode ? "#1e293b" : "#e2e8f0",
         }}
       >
-        <div style={styles.logo}>
-          🚀 CRM Pro
+        <div style={styles.brand}>
+          <span style={styles.brandIcon}>🚀</span>
+          <span>CRM Pro</span>
+        </div>
+
+        <div style={styles.userBox}>
+          <div style={styles.userAvatar}>
+            {(user?.name || "U")
+              .charAt(0)
+              .toUpperCase()}
+          </div>
+
+          <div style={{ minWidth: 0 }}>
+            <strong style={styles.userName}>
+              {user?.name || "User"}
+            </strong>
+            <span style={styles.userRole}>CRM Account</span>
+          </div>
         </div>
 
         <nav style={styles.nav}>
-          {[
-            ["Dashboard", "🏠"],
-            ["Customers", "👥"],
-            ["Leads", "🎯"],
-            ["Deals", "💼"],
-            ["Tasks", "✅"],
-            ["Reports", "📊"],
-            ["Settings", "⚙️"],
-          ].map(([name, icon]) => (
+          {menu.map(([name, icon]) => (
             <button
               key={name}
               type="button"
@@ -1456,11 +1276,11 @@ export default function App() {
                   page === name
                     ? darkMode
                       ? "#1e293b"
-                      : "#eef2ff"
+                      : "#eff6ff"
                     : "transparent",
                 color:
                   page === name
-                    ? "#4f46e5"
+                    ? "#2563eb"
                     : darkMode
                     ? "#cbd5e1"
                     : "#475569",
@@ -1473,50 +1293,25 @@ export default function App() {
         </nav>
 
         <div style={styles.sidebarBottom}>
-          <div
-            style={{
-              ...styles.userMini,
-              background: darkMode
-                ? "#1e293b"
-                : "#f8fafc",
-            }}
+          <button
+            type="button"
+            onClick={() => setDarkMode(!darkMode)}
+            style={styles.navButton}
           >
-            <div style={styles.avatar}>
-              {(currentUser?.name || "U")
-                .charAt(0)
-                .toUpperCase()}
-            </div>
-
-            <div style={{ minWidth: 0 }}>
-              <strong
-                style={{
-                  display: "block",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {currentUser?.name || "User"}
-              </strong>
-
-              <small
-                style={{
-                  color: darkMode
-                    ? "#94a3b8"
-                    : "#64748b",
-                }}
-              >
-                CRM Account
-              </small>
-            </div>
-          </div>
+            <span>{darkMode ? "☀️" : "🌙"}</span>
+            <span>{darkMode ? "Light Mode" : "Dark Mode"}</span>
+          </button>
 
           <button
             type="button"
             onClick={logout}
-            style={styles.logoutButton}
+            style={{
+              ...styles.navButton,
+              color: "#dc2626",
+            }}
           >
-            🚪 Logout
+            <span>🚪</span>
+            <span>Logout</span>
           </button>
         </div>
       </aside>
@@ -1525,317 +1320,174 @@ export default function App() {
         <header
           style={{
             ...styles.topbar,
-            background: darkMode
-              ? "#111827"
-              : "#ffffff",
-            borderColor: darkMode
-              ? "#1f2937"
-              : "#e5e7eb",
+            background: darkMode ? "#0f172a" : "#ffffff",
+            borderColor: darkMode ? "#1e293b" : "#e2e8f0",
           }}
         >
           <div>
-            <h1 style={styles.pageTitle}>
+            <h1 style={styles.pageHeading}>
               {page}
             </h1>
 
-            <p
-              style={{
-                ...styles.pageSubtitle,
-                color: darkMode
-                  ? "#94a3b8"
-                  : "#64748b",
-              }}
-            >
-              Welcome,{" "}
-              {currentUser?.name || "User"}
+            <p style={styles.pageSubheading}>
+              Manage your CRM from one place.
             </p>
           </div>
 
           <div style={styles.topActions}>
+            {loading && (
+              <span style={styles.loadingText}>
+                Loading...
+              </span>
+            )}
+
             <button
               type="button"
-              onClick={() =>
-                setDarkMode(!darkMode)
-              }
-              style={styles.iconButton}
-              title="Toggle dark mode"
+              onClick={loadAll}
+              style={styles.refreshButton}
             >
-              {darkMode ? "☀️" : "🌙"}
+              🔄 Refresh
             </button>
-
-            <div
-              style={{
-                ...styles.connectionBadge,
-                background: "#dcfce7",
-                color: "#166534",
-              }}
-            >
-              ● API Connected
-            </div>
           </div>
         </header>
 
-        {error && (
-          <div style={styles.globalError}>
-            <span>{error}</span>
+        <div style={styles.content}>
+          {error && (
+            <div style={styles.errorBox}>
+              <span>{error}</span>
 
-            <button
-              type="button"
-              onClick={() => setError("")}
-              style={styles.errorClose}
-            >
-              ×
-            </button>
-          </div>
-        )}
+              <button
+                type="button"
+                onClick={() => setError("")}
+                style={styles.errorClose}
+              >
+                ×
+              </button>
+            </div>
+          )}
 
-        {loading && (
-          <div style={styles.loadingBar}>
-            Loading CRM data...
-          </div>
-        )}
-
-        <section style={styles.content}>
           {page === "Dashboard" && (
             <>
-              <div style={styles.welcomeCard}>
+              <div style={styles.welcome}>
                 <div>
-                  <div
-                    style={
-                      styles.welcomeEyebrow
-                    }
-                  >
-                    CRM PRO
-                  </div>
-
-                  <h2
-                    style={{
-                      margin: "5px 0 8px",
-                      fontSize: 27,
-                    }}
-                  >
-                    Your business at a glance
+                  <h2 style={styles.panelTitle}>
+                    Welcome back, {user?.name || "User"} 👋
                   </h2>
 
-                  <p
-                    style={{
-                      margin: 0,
-                      color: darkMode
-                        ? "#cbd5e1"
-                        : "#64748b",
-                    }}
-                  >
-                    Manage customers, leads,
-                    deals and follow-ups from
-                    one place.
+                  <p style={styles.panelSubtitle}>
+                    Here is your CRM overview.
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={openAddLead}
+                  onClick={openAddCustomer}
                   style={styles.primaryButton}
                 >
-                  + Add Lead
+                  + Add Customer
                 </button>
               </div>
 
               <div style={styles.statsGrid}>
                 <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    👥
-                  </div>
-
+                  <span style={styles.statIcon}>👥</span>
                   <div>
-                    <div
-                      style={styles.statLabel}
-                    >
+                    <span style={styles.statLabel}>
                       Total Customers
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
+                    </span>
+                    <strong style={styles.statValue}>
                       {customers.length}
-                    </div>
+                    </strong>
                   </div>
                 </div>
 
                 <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    🎯
-                  </div>
-
+                  <span style={styles.statIcon}>🎯</span>
                   <div>
-                    <div
-                      style={styles.statLabel}
-                    >
-                      Total Leads
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
-                      {leads.length}
-                    </div>
+                    <span style={styles.statLabel}>
+                      New Leads
+                    </span>
+                    <strong style={styles.statValue}>
+                      {newLeads}
+                    </strong>
                   </div>
                 </div>
 
                 <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    💼
-                  </div>
-
+                  <span style={styles.statIcon}>💼</span>
                   <div>
-                    <div
-                      style={styles.statLabel}
-                    >
-                      Open Deals
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
-                      {openDeals}
-                    </div>
+                    <span style={styles.statLabel}>
+                      Deals
+                    </span>
+                    <strong style={styles.statValue}>
+                      {deals.length}
+                    </strong>
                   </div>
                 </div>
 
                 <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    💰
-                  </div>
-
+                  <span style={styles.statIcon}>₹</span>
                   <div>
-                    <div
-                      style={styles.statLabel}
-                    >
-                      Won Revenue
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
-                      ₹
-                      {revenue.toLocaleString(
-                        "en-IN"
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    ✅
-                  </div>
-
-                  <div>
-                    <div
-                      style={styles.statLabel}
-                    >
-                      Pending Tasks
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
-                      {pendingTasks}
-                    </div>
+                    <span style={styles.statLabel}>
+                      Revenue
+                    </span>
+                    <strong style={styles.statValue}>
+                      ₹{totalRevenue.toLocaleString("en-IN")}
+                    </strong>
                   </div>
                 </div>
               </div>
 
-              <div style={styles.twoColumn}>
+              <div style={styles.twoColumns}>
                 <div style={styles.panel}>
                   <div style={styles.panelHeader}>
                     <div>
-                      <h3
-                        style={
-                          styles.panelTitle
-                        }
-                      >
-                        Recent Leads
-                      </h3>
-
-                      <p
-                        style={
-                          styles.panelSubtitle
-                        }
-                      >
-                        Latest leads in your CRM
+                      <h2 style={styles.panelTitle}>
+                        Recent Customers
+                      </h2>
+                      <p style={styles.panelSubtitle}>
+                        Latest customers added to CRM.
                       </p>
                     </div>
 
                     <button
                       type="button"
-                      onClick={() =>
-                        setPage("Leads")
-                      }
-                      style={
-                        styles.secondaryButton
-                      }
+                      onClick={() => setPage("Customers")}
+                      style={styles.secondaryButton}
                     >
                       View All
                     </button>
                   </div>
 
-                  {leads.length === 0 ? (
+                  {customers.length === 0 ? (
                     <EmptyState
-                      icon="🎯"
-                      title="No leads yet"
-                      text="Add your first lead to get started."
-                      button="+ Add Lead"
-                      onClick={openAddLead}
+                      icon="👥"
+                      title="No customers yet"
+                      text="Add your first customer."
+                      button="+ Add Customer"
+                      onClick={openAddCustomer}
                     />
                   ) : (
-                    <div style={styles.list}>
-                      {leads
-                        .slice(0, 5)
-                        .map((lead) => (
-                          <div
-                            key={lead._id}
-                            style={
-                              styles.listItem
-                            }
-                          >
-                            <div
-                              style={
-                                styles.listAvatar
-                              }
-                            >
-                              {(
-                                lead.name || "L"
-                              )
-                                .charAt(0)
-                                .toUpperCase()}
-                            </div>
-
-                            <div
-                              style={{
-                                flex: 1,
-                                minWidth: 0,
-                              }}
-                            >
-                              <strong>
-                                {lead.name}
-                              </strong>
-
-                              <div
-                                style={
-                                  styles.smallText
-                                }
-                              >
-                                {lead.phone}
-                              </div>
-                            </div>
-
-                            <StatusBadge
-                              status={
-                                lead.status
-                              }
-                            />
+                    <div style={styles.simpleList}>
+                      {customers.slice(0, 5).map((customer) => (
+                        <div
+                          key={customer._id}
+                          style={styles.listRow}
+                        >
+                          <div style={styles.avatar}>
+                            {(customer.name || "C")
+                              .charAt(0)
+                              .toUpperCase()}
                           </div>
-                        ))}
+
+                          <div style={{ flex: 1 }}>
+                            <strong>{customer.name}</strong>
+                            <span style={styles.smallText}>
+                              {customer.phone}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1843,70 +1495,38 @@ export default function App() {
                 <div style={styles.panel}>
                   <div style={styles.panelHeader}>
                     <div>
-                      <h3
-                        style={
-                          styles.panelTitle
-                        }
-                      >
-                        Quick Actions
-                      </h3>
-
-                      <p
-                        style={
-                          styles.panelSubtitle
-                        }
-                      >
-                        Common CRM actions
+                      <h2 style={styles.panelTitle}>
+                        Task Overview
+                      </h2>
+                      <p style={styles.panelSubtitle}>
+                        Current task status.
                       </p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setPage("Tasks")}
+                      style={styles.secondaryButton}
+                    >
+                      View Tasks
+                    </button>
                   </div>
 
-                  <div style={styles.quickGrid}>
-                    <button
-                      type="button"
-                      onClick={openAddCustomer}
-                      style={
-                        styles.quickButton
-                      }
-                    >
-                      <span>👥</span>
-                      <strong>
-                        Add Customer
-                      </strong>
-                    </button>
+                  <div style={styles.overviewGrid}>
+                    <div style={styles.overviewItem}>
+                      <span>All Tasks</span>
+                      <strong>{tasks.length}</strong>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={openAddLead}
-                      style={
-                        styles.quickButton
-                      }
-                    >
-                      <span>🎯</span>
-                      <strong>Add Lead</strong>
-                    </button>
+                    <div style={styles.overviewItem}>
+                      <span>Pending</span>
+                      <strong>{pendingTasks}</strong>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={openAddDeal}
-                      style={
-                        styles.quickButton
-                      }
-                    >
-                      <span>💼</span>
-                      <strong>Add Deal</strong>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={openAddTask}
-                      style={
-                        styles.quickButton
-                      }
-                    >
-                      <span>✅</span>
-                      <strong>Add Task</strong>
-                    </button>
+                    <div style={styles.overviewItem}>
+                      <span>Completed</span>
+                      <strong>{completedTasks}</strong>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1921,10 +1541,8 @@ export default function App() {
                     Customers
                   </h2>
 
-                  <p
-                    style={styles.panelSubtitle}
-                  >
-                    Manage all your customers
+                  <p style={styles.panelSubtitle}>
+                    Manage your customers and their details.
                   </p>
                 </div>
 
@@ -1941,43 +1559,24 @@ export default function App() {
                 <input
                   type="search"
                   placeholder="Search customers..."
-                  value={customerSearch}
-                  onChange={(e) =>
-                    setCustomerSearch(
-                      e.target.value
-                    )
-                  }
-                  style={{
-                    ...styles.searchInput,
-                    background: darkMode
-                      ? "#0f172a"
-                      : "#ffffff",
-                    color: darkMode
-                      ? "#f8fafc"
-                      : "#0f172a",
-                  }}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={styles.searchInput}
                 />
               </div>
 
-              {filteredCustomers.length ===
-              0 ? (
+              {filteredCustomers.length === 0 ? (
                 <EmptyState
                   icon="👥"
                   title="No customers found"
                   text={
-                    customerSearch
+                    search
                       ? "Try another search."
-                      : "Add your first customer."
+                      : "Create your first customer."
                   }
-                  button={
-                    customerSearch
-                      ? null
-                      : "+ Add Customer"
-                  }
+                  button={search ? null : "+ Add Customer"}
                   onClick={
-                    customerSearch
-                      ? null
-                      : openAddCustomer
+                    search ? null : openAddCustomer
                   }
                 />
               ) : (
@@ -1985,137 +1584,61 @@ export default function App() {
                   <table style={styles.table}>
                     <thead>
                       <tr>
-                        <th style={styles.th}>
-                          Customer
-                        </th>
-                        <th style={styles.th}>
-                          Phone
-                        </th>
-                        <th style={styles.th}>
-                          Email
-                        </th>
-                        <th style={styles.th}>
-                          Company
-                        </th>
-                        <th style={styles.th}>
-                          Actions
-                        </th>
+                        <th style={styles.th}>Name</th>
+                        <th style={styles.th}>Phone</th>
+                        <th style={styles.th}>Email</th>
+                        <th style={styles.th}>Company</th>
+                        <th style={styles.th}>Actions</th>
                       </tr>
                     </thead>
 
                     <tbody>
-                      {filteredCustomers.map(
-                        (customer) => (
-                          <tr
-                            key={customer._id}
-                          >
-                            <td
-                              style={styles.td}
-                            >
-                              <div
-                                style={
-                                  styles.customerCell
+                      {filteredCustomers.map((customer) => (
+                        <tr key={customer._id}>
+                          <td style={styles.td}>
+                            <strong>{customer.name}</strong>
+                          </td>
+
+                          <td style={styles.td}>
+                            {customer.phone || "—"}
+                          </td>
+
+                          <td style={styles.td}>
+                            {customer.email || "—"}
+                          </td>
+
+                          <td style={styles.td}>
+                            {customer.company || "—"}
+                          </td>
+
+                          <td style={styles.td}>
+                            <div style={styles.actionRow}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditCustomer(customer)
                                 }
+                                style={styles.smallAction}
                               >
-                                <div
-                                  style={
-                                    styles.listAvatar
-                                  }
-                                >
-                                  {(
-                                    customer.name ||
-                                    "C"
-                                  )
-                                    .charAt(0)
-                                    .toUpperCase()}
-                                </div>
+                                ✏️
+                              </button>
 
-                                <strong>
-                                  {
-                                    customer.name
-                                  }
-                                </strong>
-                              </div>
-                            </td>
-
-                            <td
-                              style={styles.td}
-                            >
-                              {customer.phone ||
-                                "—"}
-                            </td>
-
-                            <td
-                              style={styles.td}
-                            >
-                              {customer.email ||
-                                "—"}
-                            </td>
-
-                            <td
-                              style={styles.td}
-                            >
-                              {customer.company ||
-                                "—"}
-                            </td>
-
-                            <td
-                              style={styles.td}
-                            >
-                              <div
-                                style={
-                                  styles.actionRow
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  deleteCustomer(customer._id)
                                 }
+                                style={{
+                                  ...styles.smallAction,
+                                  color: "#dc2626",
+                                }}
                               >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openCommunication(
-                                      customer
-                                    )
-                                  }
-                                  style={
-                                    styles.smallAction
-                                  }
-                                  title="Contact"
-                                >
-                                  💬
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openEditCustomer(
-                                      customer
-                                    )
-                                  }
-                                  style={
-                                    styles.smallAction
-                                  }
-                                >
-                                  ✏️
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    deleteCustomer(
-                                      customer._id
-                                    )
-                                  }
-                                  style={{
-                                    ...styles.smallAction,
-                                    color:
-                                      "#dc2626",
-                                  }}
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      )}
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -2131,12 +1654,8 @@ export default function App() {
                     Leads
                   </h2>
 
-                  <p
-                    style={styles.panelSubtitle}
-                  >
-                    Capture and manage leads from
-                    Facebook, Instagram, WhatsApp,
-                    Google and other sources.
+                  <p style={styles.panelSubtitle}>
+                    Manage leads from ads and other sources.
                   </p>
                 </div>
 
@@ -2149,7 +1668,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div style={styles.leadSummary}>
+              <div style={styles.statsGridSmall}>
                 <div style={styles.miniStat}>
                   <span>All Leads</span>
                   <strong>{leads.length}</strong>
@@ -2162,9 +1681,7 @@ export default function App() {
 
                 <div style={styles.miniStat}>
                   <span>Converted</span>
-                  <strong>
-                    {convertedLeads}
-                  </strong>
+                  <strong>{convertedLeads}</strong>
                 </div>
               </div>
 
@@ -2174,19 +1691,9 @@ export default function App() {
                   placeholder="Search leads..."
                   value={leadSearch}
                   onChange={(e) =>
-                    setLeadSearch(
-                      e.target.value
-                    )
+                    setLeadSearch(e.target.value)
                   }
-                  style={{
-                    ...styles.searchInput,
-                    background: darkMode
-                      ? "#0f172a"
-                      : "#ffffff",
-                    color: darkMode
-                      ? "#f8fafc"
-                      : "#0f172a",
-                  }}
+                  style={styles.searchInput}
                 />
               </div>
 
@@ -2197,17 +1704,13 @@ export default function App() {
                   text={
                     leadSearch
                       ? "Try another search."
-                      : "Create a lead or connect an ad lead webhook later."
+                      : "Add your first lead."
                   }
                   button={
-                    leadSearch
-                      ? null
-                      : "+ Add Lead"
+                    leadSearch ? null : "+ Add Lead"
                   }
                   onClick={
-                    leadSearch
-                      ? null
-                      : openAddLead
+                    leadSearch ? null : openAddLead
                   }
                 />
               ) : (
@@ -2215,150 +1718,85 @@ export default function App() {
                   <table style={styles.table}>
                     <thead>
                       <tr>
-                        <th style={styles.th}>
-                          Lead
-                        </th>
-                        <th style={styles.th}>
-                          Phone
-                        </th>
-                        <th style={styles.th}>
-                          Source
-                        </th>
-                        <th style={styles.th}>
-                          Status
-                        </th>
-                        <th style={styles.th}>
-                          Actions
-                        </th>
+                        <th style={styles.th}>Lead</th>
+                        <th style={styles.th}>Phone</th>
+                        <th style={styles.th}>Platform</th>
+                        <th style={styles.th}>Status</th>
+                        <th style={styles.th}>Actions</th>
                       </tr>
                     </thead>
 
                     <tbody>
-                      {filteredLeads.map(
-                        (lead) => (
-                          <tr key={lead._id}>
-                            <td style={styles.td}>
-                              <div
-                                style={
-                                  styles.customerCell
-                                }
-                              >
-                                <div
-                                  style={
-                                    styles.listAvatar
-                                  }
-                                >
-                                  {(
-                                    lead.name ||
-                                    "L"
-                                  )
-                                    .charAt(0)
-                                    .toUpperCase()}
-                                </div>
+                      {filteredLeads.map((lead) => (
+                        <tr key={lead._id}>
+                          <td style={styles.td}>
+                            <strong>{lead.name}</strong>
 
-                                <div>
-                                  <strong>
-                                    {lead.name}
-                                  </strong>
-
-                                  {lead.email && (
-                                    <div
-                                      style={
-                                        styles.smallText
-                                      }
-                                    >
-                                      {lead.email}
-                                    </div>
-                                  )}
-                                </div>
+                            {lead.email && (
+                              <div style={styles.smallText}>
+                                {lead.email}
                               </div>
-                            </td>
+                            )}
+                          </td>
 
-                            <td style={styles.td}>
-                              {lead.phone ||
-                                "—"}
-                            </td>
+                          <td style={styles.td}>
+                            {lead.phone}
+                          </td>
 
-                            <td style={styles.td}>
-                              <span
-                                style={
-                                  styles.sourceBadge
-                                }
-                              >
-                                {lead.platform ||
-                                  "Other"}
-                              </span>
-                            </td>
+                          <td style={styles.td}>
+                            <span style={styles.badge}>
+                              {lead.platform || "Other"}
+                            </span>
+                          </td>
 
-                            <td style={styles.td}>
-                              <StatusBadge
-                                status={
-                                  lead.status
-                                }
-                              />
-                            </td>
+                          <td style={styles.td}>
+                            <StatusBadge
+                              status={lead.status}
+                            />
+                          </td>
 
-                            <td style={styles.td}>
-                              <div
-                                style={
-                                  styles.actionRow
-                                }
-                              >
-                                {!lead.convertedToCustomer &&
-                                  lead.status !==
-                                    "Converted" && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        convertLead(
-                                          lead
-                                        )
-                                      }
-                                      disabled={
-                                        leadLoading
-                                      }
-                                      style={
-                                        styles.convertButton
-                                      }
-                                    >
-                                      Convert
-                                    </button>
-                                  )}
-
+                          <td style={styles.td}>
+                            <div style={styles.actionRow}>
+                              {lead.status !==
+                                "Converted" && (
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    openEditLead(
-                                      lead
-                                    )
+                                    convertLead(lead)
                                   }
-                                  style={
-                                    styles.smallAction
-                                  }
+                                  style={styles.smallAction}
+                                  title="Convert to customer"
                                 >
-                                  ✏️
+                                  ➡️
                                 </button>
+                              )}
 
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    deleteLead(
-                                      lead._id
-                                    )
-                                  }
-                                  style={{
-                                    ...styles.smallAction,
-                                    color:
-                                      "#dc2626",
-                                  }}
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditLead(lead)
+                                }
+                                style={styles.smallAction}
+                              >
+                                ✏️
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  deleteLead(lead._id)
+                                }
+                                style={{
+                                  ...styles.smallAction,
+                                  color: "#dc2626",
+                                }}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -2374,10 +1812,8 @@ export default function App() {
                     Deals
                   </h2>
 
-                  <p
-                    style={styles.panelSubtitle}
-                  >
-                    Manage sales opportunities.
+                  <p style={styles.panelSubtitle}>
+                    Manage your sales opportunities.
                   </p>
                 </div>
 
@@ -2396,19 +1832,9 @@ export default function App() {
                   placeholder="Search deals..."
                   value={dealSearch}
                   onChange={(e) =>
-                    setDealSearch(
-                      e.target.value
-                    )
+                    setDealSearch(e.target.value)
                   }
-                  style={{
-                    ...styles.searchInput,
-                    background: darkMode
-                      ? "#0f172a"
-                      : "#ffffff",
-                    color: darkMode
-                      ? "#f8fafc"
-                      : "#0f172a",
-                  }}
+                  style={styles.searchInput}
                 />
               </div>
 
@@ -2416,150 +1842,97 @@ export default function App() {
                 <EmptyState
                   icon="💼"
                   title="No deals found"
-                  text="Create your first sales deal."
-                  button="+ Add Deal"
-                  onClick={openAddDeal}
+                  text={
+                    dealSearch
+                      ? "Try another search."
+                      : "Create your first deal."
+                  }
+                  button={
+                    dealSearch ? null : "+ Add Deal"
+                  }
+                  onClick={
+                    dealSearch ? null : openAddDeal
+                  }
                 />
               ) : (
                 <div style={styles.tableWrap}>
                   <table style={styles.table}>
                     <thead>
                       <tr>
-                        <th style={styles.th}>
-                          Deal
-                        </th>
-                        <th style={styles.th}>
-                          Customer
-                        </th>
-                        <th style={styles.th}>
-                          Amount
-                        </th>
-                        <th style={styles.th}>
-                          Status
-                        </th>
-                        <th style={styles.th}>
-                          Actions
-                        </th>
+                        <th style={styles.th}>Deal</th>
+                        <th style={styles.th}>Customer</th>
+                        <th style={styles.th}>Amount</th>
+                        <th style={styles.th}>Stage</th>
+                        <th style={styles.th}>Status</th>
+                        <th style={styles.th}>Actions</th>
                       </tr>
                     </thead>
 
                     <tbody>
-                      {filteredDeals.map(
-                        (deal) => {
-                          const customer =
-                            deal.customerId &&
-                            typeof deal.customerId ===
-                              "object"
-                              ? deal.customerId
-                              : customers.find(
-                                  (c) =>
-                                    c._id ===
-                                    deal.customerId
-                                );
+                      {filteredDeals.map((deal) => (
+                        <tr key={deal._id}>
+                          <td style={styles.td}>
+                            <strong>
+                              {deal.title ||
+                                deal.name ||
+                                "Untitled Deal"}
+                            </strong>
+                          </td>
 
-                          return (
-                            <tr key={deal._id}>
-                              <td
-                                style={
-                                  styles.td
+                          <td style={styles.td}>
+                            {getCustomerName(
+                              deal.customerId,
+                              customers
+                            )}
+                          </td>
+
+                          <td style={styles.td}>
+                            ₹
+                            {Number(
+                              deal.amount ||
+                                deal.value ||
+                                0
+                            ).toLocaleString("en-IN")}
+                          </td>
+
+                          <td style={styles.td}>
+                            {deal.stage || "—"}
+                          </td>
+
+                          <td style={styles.td}>
+                            <StatusBadge
+                              status={deal.status || "Open"}
+                            />
+                          </td>
+
+                          <td style={styles.td}>
+                            <div style={styles.actionRow}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditDeal(deal)
                                 }
+                                style={styles.smallAction}
                               >
-                                <strong>
-                                  {deal.title ||
-                                    "Untitled Deal"}
-                                </strong>
+                                ✏️
+                              </button>
 
-                                {deal.notes && (
-                                  <div
-                                    style={
-                                      styles.smallText
-                                    }
-                                  >
-                                    {deal.notes}
-                                  </div>
-                                )}
-                              </td>
-
-                              <td
-                                style={
-                                  styles.td
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  deleteDeal(deal._id)
                                 }
+                                style={{
+                                  ...styles.smallAction,
+                                  color: "#dc2626",
+                                }}
                               >
-                                {customer?.name ||
-                                  "—"}
-                              </td>
-
-                              <td
-                                style={
-                                  styles.td
-                                }
-                              >
-                                ₹
-                                {Number(
-                                  deal.amount ||
-                                    0
-                                ).toLocaleString(
-                                  "en-IN"
-                                )}
-                              </td>
-
-                              <td
-                                style={
-                                  styles.td
-                                }
-                              >
-                                <StatusBadge
-                                  status={
-                                    deal.status
-                                  }
-                                />
-                              </td>
-
-                              <td
-                                style={
-                                  styles.td
-                                }
-                              >
-                                <div
-                                  style={
-                                    styles.actionRow
-                                  }
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      openEditDeal(
-                                        deal
-                                      )
-                                    }
-                                    style={
-                                      styles.smallAction
-                                    }
-                                  >
-                                    ✏️
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      deleteDeal(
-                                        deal._id
-                                      )
-                                    }
-                                    style={{
-                                      ...styles.smallAction,
-                                      color:
-                                        "#dc2626",
-                                    }}
-                                  >
-                                    🗑️
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        }
-                      )}
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -2575,11 +1948,8 @@ export default function App() {
                     Tasks
                   </h2>
 
-                  <p
-                    style={styles.panelSubtitle}
-                  >
-                    Manage follow-ups, work and
-                    customer tasks.
+                  <p style={styles.panelSubtitle}>
+                    Manage follow-ups, work and customer tasks.
                   </p>
                 </div>
 
@@ -2592,26 +1962,20 @@ export default function App() {
                 </button>
               </div>
 
-              <div style={styles.taskSummary}>
+              <div style={styles.statsGridSmall}>
                 <div style={styles.miniStat}>
                   <span>All Tasks</span>
-                  <strong>
-                    {tasks.length}
-                  </strong>
+                  <strong>{tasks.length}</strong>
                 </div>
 
                 <div style={styles.miniStat}>
                   <span>Pending</span>
-                  <strong>
-                    {pendingTasks}
-                  </strong>
+                  <strong>{pendingTasks}</strong>
                 </div>
 
                 <div style={styles.miniStat}>
                   <span>Completed</span>
-                  <strong>
-                    {completedTasks}
-                  </strong>
+                  <strong>{completedTasks}</strong>
                 </div>
               </div>
 
@@ -2621,19 +1985,9 @@ export default function App() {
                   placeholder="Search tasks..."
                   value={taskSearch}
                   onChange={(e) =>
-                    setTaskSearch(
-                      e.target.value
-                    )
+                    setTaskSearch(e.target.value)
                   }
-                  style={{
-                    ...styles.searchInput,
-                    background: darkMode
-                      ? "#0f172a"
-                      : "#ffffff",
-                    color: darkMode
-                      ? "#f8fafc"
-                      : "#0f172a",
-                  }}
+                  style={styles.searchInput}
                 />
               </div>
 
@@ -2647,14 +2001,10 @@ export default function App() {
                       : "Create your first task."
                   }
                   button={
-                    taskSearch
-                      ? null
-                      : "+ Add Task"
+                    taskSearch ? null : "+ Add Task"
                   }
                   onClick={
-                    taskSearch
-                      ? null
-                      : openAddTask
+                    taskSearch ? null : openAddTask
                   }
                 />
               ) : (
@@ -2662,162 +2012,185 @@ export default function App() {
                   <table style={styles.table}>
                     <thead>
                       <tr>
-                        <th style={styles.th}>
-                          Task
-                        </th>
-
-                        <th style={styles.th}>
-                          Customer
-                        </th>
-
-                        <th style={styles.th}>
-                          Priority
-                        </th>
-
-                        <th style={styles.th}>
-                          Status
-                        </th>
-
-                        <th style={styles.th}>
-                          Due Date
-                        </th>
-
-                        <th style={styles.th}>
-                          Actions
-                        </th>
+                        <th style={styles.th}>Task</th>
+                        <th style={styles.th}>Customer</th>
+                        <th style={styles.th}>Priority</th>
+                        <th style={styles.th}>Status</th>
+                        <th style={styles.th}>Due Date</th>
+                        <th style={styles.th}>Actions</th>
                       </tr>
                     </thead>
 
                     <tbody>
-                      {filteredTasks.map(
-                        (task) => {
-                          const customer =
-                            task.customerId &&
-                            typeof task.customerId ===
-                              "object"
-                              ? task.customerId
-                              : customers.find(
-                                  (c) =>
-                                    c._id ===
-                                    task.customerId
-                                );
+                      {filteredTasks.map((task) => (
+                        <tr key={task._id}>
+                          <td style={styles.td}>
+                            <strong>{task.title}</strong>
 
-                          return (
-                            <tr key={task._id}>
-                              <td
-                                style={
-                                  styles.td
+                            {task.description && (
+                              <div style={styles.smallText}>
+                                {task.description}
+                              </div>
+                            )}
+                          </td>
+
+                          <td style={styles.td}>
+                            {getCustomerName(
+                              task.customerId,
+                              customers
+                            )}
+                          </td>
+
+                          <td style={styles.td}>
+                            <PriorityBadge
+                              priority={task.priority}
+                            />
+                          </td>
+
+                          <td style={styles.td}>
+                            <StatusBadge
+                              status={task.status}
+                            />
+                          </td>
+
+                          <td style={styles.td}>
+                            {formatDate(task.dueDate)}
+                          </td>
+
+                          <td style={styles.td}>
+                            <div style={styles.actionRow}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditTask(task)
                                 }
+                                style={styles.smallAction}
                               >
-                                <strong>
-                                  {task.title}
-                                </strong>
+                                ✏️
+                              </button>
 
-                                {task.description && (
-                                  <div
-                                    style={
-                                      styles.smallText
-                                    }
-                                  >
-                                    {task.description}
-                                  </div>
-                                )}
-                              </td>
-
-                              <td
-                                style={
-                                  styles.td
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  deleteTask(task._id)
                                 }
+                                style={{
+                                  ...styles.smallAction,
+                                  color: "#dc2626",
+                                }}
                               >
-                                {customer?.name ||
-                                  "—"}
-                              </td>
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
-                              <td
-                                style={
-                                  styles.td
+          {page === "Interactions" && (
+            <div style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <h2 style={styles.panelTitle}>
+                    Interactions
+                  </h2>
+
+                  <p style={styles.panelSubtitle}>
+                    Track calls, meetings and customer communication.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openAddInteraction}
+                  style={styles.primaryButton}
+                >
+                  + Add Interaction
+                </button>
+              </div>
+
+              {interactions.length === 0 ? (
+                <EmptyState
+                  icon="💬"
+                  title="No interactions found"
+                  text="Record your first customer interaction."
+                  button="+ Add Interaction"
+                  onClick={openAddInteraction}
+                />
+              ) : (
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Customer</th>
+                        <th style={styles.th}>Type</th>
+                        <th style={styles.th}>Notes</th>
+                        <th style={styles.th}>Date</th>
+                        <th style={styles.th}>Actions</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {interactions.map((interaction) => (
+                        <tr key={interaction._id}>
+                          <td style={styles.td}>
+                            {getCustomerName(
+                              interaction.customerId,
+                              customers
+                            )}
+                          </td>
+
+                          <td style={styles.td}>
+                            {interaction.type || "—"}
+                          </td>
+
+                          <td style={styles.td}>
+                            {interaction.notes || "—"}
+                          </td>
+
+                          <td style={styles.td}>
+                            {formatDate(
+                              interaction.createdAt
+                            )}
+                          </td>
+
+                          <td style={styles.td}>
+                            <div style={styles.actionRow}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditInteraction(
+                                    interaction
+                                  )
                                 }
+                                style={styles.smallAction}
                               >
-                                <PriorityBadge
-                                  priority={
-                                    task.priority
-                                  }
-                                />
-                              </td>
+                                ✏️
+                              </button>
 
-                              <td
-                                style={
-                                  styles.td
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  deleteInteraction(
+                                    interaction._id
+                                  )
                                 }
+                                style={{
+                                  ...styles.smallAction,
+                                  color: "#dc2626",
+                                }}
                               >
-                                <StatusBadge
-                                  status={
-                                    task.status
-                                  }
-                                />
-                              </td>
-
-                              <td
-                                style={
-                                  styles.td
-                                }
-                              >
-                                {task.dueDate
-                                  ? new Date(
-                                      task.dueDate
-                                    ).toLocaleDateString(
-                                      "en-IN"
-                                    )
-                                  : "—"}
-                              </td>
-
-                              <td
-                                style={
-                                  styles.td
-                                }
-                              >
-                                <div
-                                  style={
-                                    styles.actionRow
-                                  }
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      openEditTask(
-                                        task
-                                      )
-                                    }
-                                    style={
-                                      styles.smallAction
-                                    }
-                                    title="Edit task"
-                                  >
-                                    ✏️
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      deleteTask(
-                                        task._id
-                                      )
-                                    }
-                                    style={{
-                                      ...styles.smallAction,
-                                      color:
-                                        "#dc2626",
-                                    }}
-                                    title="Delete task"
-                                  >
-                                    🗑️
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        }
-                      )}
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -2826,235 +2199,75 @@ export default function App() {
           )}
 
           {page === "Reports" && (
-            <div>
-              <div style={styles.statsGrid}>
-                <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    👥
-                  </div>
+            <div style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <h2 style={styles.panelTitle}>
+                    Reports
+                  </h2>
 
-                  <div>
-                    <div
-                      style={styles.statLabel}
-                    >
-                      Customers
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
-                      {customers.length}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    🎯
-                  </div>
-
-                  <div>
-                    <div
-                      style={styles.statLabel}
-                    >
-                      Leads
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
-                      {leads.length}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    💼
-                  </div>
-
-                  <div>
-                    <div
-                      style={styles.statLabel}
-                    >
-                      Deals
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
-                      {deals.length}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={styles.statCard}>
-                  <div style={styles.statIcon}>
-                    💰
-                  </div>
-
-                  <div>
-                    <div
-                      style={styles.statLabel}
-                    >
-                      Revenue
-                    </div>
-
-                    <div
-                      style={styles.statValue}
-                    >
-                      ₹
-                      {revenue.toLocaleString(
-                        "en-IN"
-                      )}
-                    </div>
-                  </div>
+                  <p style={styles.panelSubtitle}>
+                    CRM activity summary.
+                  </p>
                 </div>
               </div>
 
-              <div style={styles.twoColumn}>
-                <div style={styles.panel}>
-                  <h3 style={styles.panelTitle}>
-                    Lead Status
-                  </h3>
-
-                  <div style={styles.reportList}>
-                    {LEAD_STATUSES.map(
-                      (status) => {
-                        const count =
-                          leads.filter(
-                            (lead) =>
-                              lead.status ===
-                              status
-                          ).length;
-
-                        return (
-                          <div
-                            key={status}
-                            style={
-                              styles.reportRow
-                            }
-                          >
-                            <span>
-                              {status}
-                            </span>
-
-                            <strong>
-                              {count}
-                            </strong>
-                          </div>
-                        );
-                      }
-                    )}
-                  </div>
+              <div style={styles.reportGrid}>
+                <div style={styles.reportCard}>
+                  <span>Customers</span>
+                  <strong>{customers.length}</strong>
                 </div>
 
-                <div style={styles.panel}>
-                  <h3 style={styles.panelTitle}>
-                    Deal Status
-                  </h3>
+                <div style={styles.reportCard}>
+                  <span>Leads</span>
+                  <strong>{leads.length}</strong>
+                </div>
 
-                  <div style={styles.reportList}>
-                    {DEAL_STATUSES.map(
-                      (status) => {
-                        const count =
-                          deals.filter(
-                            (deal) =>
-                              deal.status ===
-                              status
-                          ).length;
+                <div style={styles.reportCard}>
+                  <span>Deals</span>
+                  <strong>{deals.length}</strong>
+                </div>
 
-                        return (
-                          <div
-                            key={status}
-                            style={
-                              styles.reportRow
-                            }
-                          >
-                            <span>
-                              {status}
-                            </span>
+                <div style={styles.reportCard}>
+                  <span>Tasks</span>
+                  <strong>{tasks.length}</strong>
+                </div>
 
-                            <strong>
-                              {count}
-                            </strong>
-                          </div>
-                        );
-                      }
-                    )}
-                  </div>
+                <div style={styles.reportCard}>
+                  <span>Interactions</span>
+                  <strong>{interactions.length}</strong>
+                </div>
+
+                <div style={styles.reportCard}>
+                  <span>Revenue</span>
+                  <strong>
+                    ₹{totalRevenue.toLocaleString("en-IN")}
+                  </strong>
                 </div>
               </div>
             </div>
           )}
 
           {page === "Settings" && (
-            <div style={styles.twoColumn}>
-              <div style={styles.panel}>
-                <h2 style={styles.panelTitle}>
-                  Account
-                </h2>
+            <div style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <h2 style={styles.panelTitle}>
+                    Settings
+                  </h2>
 
-                <div style={styles.settingRow}>
-                  <div>
-                    <strong>Login ID</strong>
-
-                    <p
-                      style={
-                        styles.panelSubtitle
-                      }
-                    >
-                      {currentUser?.name || "—"}
-                    </p>
-                  </div>
-                </div>
-
-                <div style={styles.settingRow}>
-                  <div>
-                    <strong>User ID</strong>
-
-                    <p
-                      style={
-                        styles.panelSubtitle
-                      }
-                    >
-                      {currentUser?.id || "—"}
-                    </p>
-                  </div>
-                </div>
-
-                <div style={styles.settingRow}>
-                  <div>
-                    <strong>API</strong>
-
-                    <p
-                      style={
-                        styles.panelSubtitle
-                      }
-                    >
-                      {API_URL}
-                    </p>
-                  </div>
+                  <p style={styles.panelSubtitle}>
+                    Manage your CRM preferences.
+                  </p>
                 </div>
               </div>
 
-              <div style={styles.panel}>
-                <h2 style={styles.panelTitle}>
-                  Preferences
-                </h2>
-
+              <div style={styles.settingsList}>
                 <div style={styles.settingRow}>
                   <div>
                     <strong>Dark Mode</strong>
-
-                    <p
-                      style={
-                        styles.panelSubtitle
-                      }
-                    >
-                      {darkMode
-                        ? "Dark mode is ON"
-                        : "Dark mode is OFF"}
+                    <p style={styles.smallText}>
+                      Change the CRM appearance.
                     </p>
                   </div>
 
@@ -3063,68 +2276,56 @@ export default function App() {
                     onClick={() =>
                       setDarkMode(!darkMode)
                     }
-                    style={
-                      darkMode
-                        ? styles.primaryButton
-                        : styles.secondaryButton
-                    }
+                    style={{
+                      ...styles.toggle,
+                      background: darkMode
+                        ? "#2563eb"
+                        : "#cbd5e1",
+                    }}
                   >
-                    {darkMode ? "ON" : "OFF"}
+                    <span
+                      style={{
+                        ...styles.toggleDot,
+                        transform: darkMode
+                          ? "translateX(20px)"
+                          : "translateX(0)",
+                      }}
+                    />
                   </button>
                 </div>
 
                 <div style={styles.settingRow}>
                   <div>
-                    <strong>
-                      Database Customers
-                    </strong>
-
-                    <p
-                      style={
-                        styles.panelSubtitle
-                      }
-                    >
-                      {customers.length} customers
-                      loaded
+                    <strong>Backend</strong>
+                    <p style={styles.smallText}>
+                      {API_URL}
                     </p>
                   </div>
+
+                  <span style={styles.onlineBadge}>
+                    ● Connected
+                  </span>
                 </div>
 
                 <div style={styles.settingRow}>
                   <div>
-                    <strong>
-                      Database Leads
-                    </strong>
-
-                    <p
-                      style={
-                        styles.panelSubtitle
-                      }
-                    >
-                      {leads.length} leads loaded
+                    <strong>Database Records</strong>
+                    <p style={styles.smallText}>
+                      Customers, leads, deals and tasks
                     </p>
                   </div>
-                </div>
 
-                <div style={styles.settingRow}>
-                  <div>
-                    <strong>
-                      Database Tasks
-                    </strong>
-
-                    <p
-                      style={
-                        styles.panelSubtitle
-                      }
-                    >
-                      {tasks.length} tasks loaded
-                    </p>
-                  </div>
+                  <strong>
+                    {customers.length +
+                      leads.length +
+                      deals.length +
+                      tasks.length}
+                  </strong>
                 </div>
               </div>
             </div>
           )}
-        </section>
+        </div>
       </main>
 
       {showCustomerModal && (
@@ -3134,59 +2335,62 @@ export default function App() {
               ? "Edit Customer"
               : "Add Customer"
           }
-          onClose={() =>
-            setShowCustomerModal(false)
-          }
+          onClose={() => {
+            setShowCustomerModal(false);
+            setEditingCustomer(null);
+          }}
         >
           <form onSubmit={saveCustomer}>
-            <div style={styles.formGrid}>
-              <FormInput
-                label="Name *"
-                value={customerForm.name}
-                onChange={(value) =>
-                  setCustomerForm({
-                    ...customerForm,
-                    name: value,
-                  })
-                }
-                required
-              />
+            <FormInput
+              label="Name"
+              value={customerForm.name}
+              onChange={(e) =>
+                setCustomerForm({
+                  ...customerForm,
+                  name: e.target.value,
+                })
+              }
+              placeholder="Customer name"
+              required
+            />
 
-              <FormInput
-                label="Phone *"
-                value={customerForm.phone}
-                onChange={(value) =>
-                  setCustomerForm({
-                    ...customerForm,
-                    phone: value,
-                  })
-                }
-                required
-              />
+            <FormInput
+              label="Phone"
+              value={customerForm.phone}
+              onChange={(e) =>
+                setCustomerForm({
+                  ...customerForm,
+                  phone: e.target.value,
+                })
+              }
+              placeholder="Phone number"
+              required
+            />
 
-              <FormInput
-                label="Email"
-                type="email"
-                value={customerForm.email}
-                onChange={(value) =>
-                  setCustomerForm({
-                    ...customerForm,
-                    email: value,
-                  })
-                }
-              />
+            <FormInput
+              label="Email"
+              value={customerForm.email}
+              onChange={(e) =>
+                setCustomerForm({
+                  ...customerForm,
+                  email: e.target.value,
+                })
+              }
+              placeholder="Email address"
+              type="email"
+            />
 
-              <FormInput
-                label="Company"
-                value={customerForm.company}
-                onChange={(value) =>
-                  setCustomerForm({
-                    ...customerForm,
-                    company: value,
-                  })
-                }
-              />
-            </div>
+            <FormInput
+              label="Company"
+              value={customerForm.company}
+              onChange={(e) =>
+                setCustomerForm({
+                  ...customerForm,
+                  company: e.target.value,
+                })
+              }
+              placeholder="Company name"
+            />
 
             <div style={styles.modalActions}>
               <button
@@ -3194,23 +2398,21 @@ export default function App() {
                 onClick={() =>
                   setShowCustomerModal(false)
                 }
-                style={
-                  styles.secondaryButton
-                }
+                style={styles.secondaryButton}
               >
                 Cancel
               </button>
 
               <button
                 type="submit"
-                disabled={savingCustomer}
+                disabled={saving}
                 style={styles.primaryButton}
               >
-                {savingCustomer
+                {saving
                   ? "Saving..."
                   : editingCustomer
                   ? "Update Customer"
-                  : "Save Customer"}
+                  : "Create Customer"}
               </button>
             </div>
           </form>
@@ -3220,90 +2422,88 @@ export default function App() {
       {showLeadModal && (
         <Modal
           title={
-            editingLead
-              ? "Edit Lead"
-              : "Add Lead"
+            editingLead ? "Edit Lead" : "Add Lead"
           }
-          onClose={() =>
-            setShowLeadModal(false)
-          }
-          width={650}
+          onClose={() => {
+            setShowLeadModal(false);
+            setEditingLead(null);
+          }}
         >
           <form onSubmit={saveLead}>
-            <div style={styles.formGrid}>
-              <FormInput
-                label="Name *"
-                value={leadForm.name}
-                onChange={(value) =>
-                  setLeadForm({
-                    ...leadForm,
-                    name: value,
-                  })
-                }
-                required
-              />
+            <FormInput
+              label="Name"
+              value={leadForm.name}
+              onChange={(e) =>
+                setLeadForm({
+                  ...leadForm,
+                  name: e.target.value,
+                })
+              }
+              placeholder="Lead name"
+              required
+            />
 
-              <FormInput
-                label="Phone *"
-                value={leadForm.phone}
-                onChange={(value) =>
-                  setLeadForm({
-                    ...leadForm,
-                    phone: value,
-                  })
-                }
-                required
-              />
+            <FormInput
+              label="Phone"
+              value={leadForm.phone}
+              onChange={(e) =>
+                setLeadForm({
+                  ...leadForm,
+                  phone: e.target.value,
+                })
+              }
+              placeholder="Phone number"
+              required
+            />
 
-              <FormInput
-                label="Email"
-                type="email"
-                value={leadForm.email}
-                onChange={(value) =>
-                  setLeadForm({
-                    ...leadForm,
-                    email: value,
-                  })
-                }
-              />
+            <FormInput
+              label="Email"
+              value={leadForm.email}
+              onChange={(e) =>
+                setLeadForm({
+                  ...leadForm,
+                  email: e.target.value,
+                })
+              }
+              placeholder="Email"
+              type="email"
+            />
 
-              <FormSelect
-                label="Platform / Source"
-                value={leadForm.platform}
-                onChange={(value) =>
-                  setLeadForm({
-                    ...leadForm,
-                    platform: value,
-                  })
-                }
-                options={PLATFORMS}
-              />
+            <FormSelect
+              label="Platform"
+              value={leadForm.platform}
+              onChange={(e) =>
+                setLeadForm({
+                  ...leadForm,
+                  platform: e.target.value,
+                })
+              }
+              options={PLATFORMS}
+            />
 
-              <FormSelect
-                label="Status"
-                value={leadForm.status}
-                onChange={(value) =>
-                  setLeadForm({
-                    ...leadForm,
-                    status: value,
-                  })
-                }
-                options={LEAD_STATUSES}
-              />
+            <FormInput
+              label="External Lead ID"
+              value={leadForm.externalLeadId}
+              onChange={(e) =>
+                setLeadForm({
+                  ...leadForm,
+                  externalLeadId: e.target.value,
+                })
+              }
+              placeholder="Optional"
+            />
 
-              <FormInput
-                label="External Lead ID"
-                value={
-                  leadForm.externalLeadId
-                }
-                onChange={(value) =>
-                  setLeadForm({
-                    ...leadForm,
-                    externalLeadId: value,
-                  })
-                }
-              />
-            </div>
+            <FormSelect
+              label="Status"
+              value={leadForm.status}
+              onChange={(e) =>
+                setLeadForm({
+                  ...leadForm,
+                  status: e.target.value,
+                })
+              }
+              options={LEAD_STATUSES}
+            />
 
             <div style={styles.formGroup}>
               <label style={styles.label}>
@@ -3311,7 +2511,6 @@ export default function App() {
               </label>
 
               <textarea
-                rows={4}
                 value={leadForm.message}
                 onChange={(e) =>
                   setLeadForm({
@@ -3319,11 +2518,9 @@ export default function App() {
                     message: e.target.value,
                   })
                 }
-                placeholder="Lead message..."
-                style={{
-                  ...styles.input,
-                  resize: "vertical",
-                }}
+                rows={4}
+                placeholder="Lead message"
+                style={styles.textarea}
               />
             </div>
 
@@ -3333,23 +2530,21 @@ export default function App() {
                 onClick={() =>
                   setShowLeadModal(false)
                 }
-                style={
-                  styles.secondaryButton
-                }
+                style={styles.secondaryButton}
               >
                 Cancel
               </button>
 
               <button
                 type="submit"
-                disabled={savingLead}
+                disabled={saving}
                 style={styles.primaryButton}
               >
-                {savingLead
+                {saving
                   ? "Saving..."
                   : editingLead
                   ? "Update Lead"
-                  : "Save Lead"}
+                  : "Create Lead"}
               </button>
             </div>
           </form>
@@ -3359,96 +2554,108 @@ export default function App() {
       {showDealModal && (
         <Modal
           title={
-            editingDeal
-              ? "Edit Deal"
-              : "Add Deal"
+            editingDeal ? "Edit Deal" : "Add Deal"
           }
-          onClose={() =>
-            setShowDealModal(false)
-          }
+          onClose={() => {
+            setShowDealModal(false);
+            setEditingDeal(null);
+          }}
         >
           <form onSubmit={saveDeal}>
-            <div style={styles.formGrid}>
-              <FormInput
-                label="Deal Title *"
-                value={dealForm.title}
-                onChange={(value) =>
-                  setDealForm({
-                    ...dealForm,
-                    title: value,
-                  })
-                }
-                required
-              />
-
-              <FormSelect
-                label="Customer"
-                value={dealForm.customerId}
-                onChange={(value) =>
-                  setDealForm({
-                    ...dealForm,
-                    customerId: value,
-                  })
-                }
-                options={[
-                  {
-                    value: "",
-                    label: "No customer",
-                  },
-                  ...customers.map(
-                    (customer) => ({
-                      value: customer._id,
-                      label: customer.name,
-                    })
-                  ),
-                ]}
-              />
-
-              <FormInput
-                label="Amount"
-                type="number"
-                value={dealForm.amount}
-                onChange={(value) =>
-                  setDealForm({
-                    ...dealForm,
-                    amount: value,
-                  })
-                }
-              />
-
-              <FormSelect
-                label="Status"
-                value={dealForm.status}
-                onChange={(value) =>
-                  setDealForm({
-                    ...dealForm,
-                    status: value,
-                  })
-                }
-                options={DEAL_STATUSES}
-              />
-            </div>
+            <FormInput
+              label="Deal Title"
+              value={dealForm.title}
+              onChange={(e) =>
+                setDealForm({
+                  ...dealForm,
+                  title: e.target.value,
+                })
+              }
+              placeholder="Deal title"
+              required
+            />
 
             <div style={styles.formGroup}>
               <label style={styles.label}>
-                Notes
+                Customer
               </label>
 
-              <textarea
-                rows={4}
-                value={dealForm.notes}
+              <select
+                value={dealForm.customerId}
                 onChange={(e) =>
                   setDealForm({
                     ...dealForm,
-                    notes: e.target.value,
+                    customerId: e.target.value,
                   })
                 }
-                style={{
-                  ...styles.input,
-                  resize: "vertical",
-                }}
-              />
+                style={styles.input}
+              >
+                <option value="">
+                  No customer
+                </option>
+
+                {customers.map((customer) => (
+                  <option
+                    key={customer._id}
+                    value={customer._id}
+                  >
+                    {customer.name}
+                    {customer.phone
+                      ? ` — ${customer.phone}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <FormInput
+              label="Amount"
+              value={dealForm.amount}
+              onChange={(e) =>
+                setDealForm({
+                  ...dealForm,
+                  amount: e.target.value,
+                })
+              }
+              placeholder="0"
+              type="number"
+            />
+
+            <FormSelect
+              label="Stage"
+              value={dealForm.stage}
+              onChange={(e) =>
+                setDealForm({
+                  ...dealForm,
+                  stage: e.target.value,
+                })
+              }
+              options={[
+                "New",
+                "Qualified",
+                "Proposal",
+                "Negotiation",
+                "Won",
+                "Lost",
+              ]}
+            />
+
+            <FormSelect
+              label="Status"
+              value={dealForm.status}
+              onChange={(e) =>
+                setDealForm({
+                  ...dealForm,
+                  status: e.target.value,
+                })
+              }
+              options={[
+                "Open",
+                "Won",
+                "Lost",
+                "Closed",
+              ]}
+            />
 
             <div style={styles.modalActions}>
               <button
@@ -3456,23 +2663,21 @@ export default function App() {
                 onClick={() =>
                   setShowDealModal(false)
                 }
-                style={
-                  styles.secondaryButton
-                }
+                style={styles.secondaryButton}
               >
                 Cancel
               </button>
 
               <button
                 type="submit"
-                disabled={savingDeal}
+                disabled={saving}
                 style={styles.primaryButton}
               >
-                {savingDeal
+                {saving
                   ? "Saving..."
                   : editingDeal
                   ? "Update Deal"
-                  : "Save Deal"}
+                  : "Create Deal"}
               </button>
             </div>
           </form>
@@ -3482,88 +2687,26 @@ export default function App() {
       {showTaskModal && (
         <Modal
           title={
-            editingTask
-              ? "Edit Task"
-              : "Add Task"
+            editingTask ? "Edit Task" : "Add Task"
           }
-          onClose={() =>
-            setShowTaskModal(false)
-          }
-          width={650}
+          onClose={() => {
+            setShowTaskModal(false);
+            setEditingTask(null);
+          }}
         >
           <form onSubmit={saveTask}>
-            <div style={styles.formGrid}>
-              <FormInput
-                label="Task Title *"
-                value={taskForm.title}
-                onChange={(value) =>
-                  setTaskForm({
-                    ...taskForm,
-                    title: value,
-                  })
-                }
-                required
-              />
-
-              <FormSelect
-                label="Customer"
-                value={taskForm.customerId}
-                onChange={(value) =>
-                  setTaskForm({
-                    ...taskForm,
-                    customerId: value,
-                  })
-                }
-                options={[
-                  {
-                    value: "",
-                    label: "No customer",
-                  },
-                  ...customers.map(
-                    (customer) => ({
-                      value: customer._id,
-                      label: customer.name,
-                    })
-                  ),
-                ]}
-              />
-
-              <FormSelect
-                label="Status"
-                value={taskForm.status}
-                onChange={(value) =>
-                  setTaskForm({
-                    ...taskForm,
-                    status: value,
-                  })
-                }
-                options={TASK_STATUSES}
-              />
-
-              <FormSelect
-                label="Priority"
-                value={taskForm.priority}
-                onChange={(value) =>
-                  setTaskForm({
-                    ...taskForm,
-                    priority: value,
-                  })
-                }
-                options={TASK_PRIORITIES}
-              />
-
-              <FormInput
-                label="Due Date"
-                type="date"
-                value={taskForm.dueDate}
-                onChange={(value) =>
-                  setTaskForm({
-                    ...taskForm,
-                    dueDate: value,
-                  })
-                }
-              />
-            </div>
+            <FormInput
+              label="Task Title"
+              value={taskForm.title}
+              onChange={(e) =>
+                setTaskForm({
+                  ...taskForm,
+                  title: e.target.value,
+                })
+              }
+              placeholder="Enter task title"
+              required
+            />
 
             <div style={styles.formGroup}>
               <label style={styles.label}>
@@ -3571,22 +2714,87 @@ export default function App() {
               </label>
 
               <textarea
-                rows={5}
                 value={taskForm.description}
                 onChange={(e) =>
                   setTaskForm({
                     ...taskForm,
-                    description:
-                      e.target.value,
+                    description: e.target.value,
                   })
                 }
-                placeholder="Task description..."
-                style={{
-                  ...styles.input,
-                  resize: "vertical",
-                }}
+                rows={4}
+                placeholder="Enter task description"
+                style={styles.textarea}
               />
             </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Customer
+              </label>
+
+              <select
+                value={taskForm.customerId}
+                onChange={(e) =>
+                  setTaskForm({
+                    ...taskForm,
+                    customerId: e.target.value,
+                  })
+                }
+                style={styles.input}
+              >
+                <option value="">
+                  No customer
+                </option>
+
+                {customers.map((customer) => (
+                  <option
+                    key={customer._id}
+                    value={customer._id}
+                  >
+                    {customer.name}
+                    {customer.phone
+                      ? ` — ${customer.phone}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <FormSelect
+              label="Status"
+              value={taskForm.status}
+              onChange={(e) =>
+                setTaskForm({
+                  ...taskForm,
+                  status: e.target.value,
+                })
+              }
+              options={TASK_STATUSES}
+            />
+
+            <FormSelect
+              label="Priority"
+              value={taskForm.priority}
+              onChange={(e) =>
+                setTaskForm({
+                  ...taskForm,
+                  priority: e.target.value,
+                })
+              }
+              options={PRIORITIES}
+            />
+
+            <FormInput
+              label="Due Date"
+              type="date"
+              value={taskForm.dueDate}
+              onChange={(e) =>
+                setTaskForm({
+                  ...taskForm,
+                  dueDate: e.target.value,
+                })
+              }
+            />
 
             <div style={styles.modalActions}>
               <button
@@ -3594,9 +2802,7 @@ export default function App() {
                 onClick={() =>
                   setShowTaskModal(false)
                 }
-                style={
-                  styles.secondaryButton
-                }
+                style={styles.secondaryButton}
               >
                 Cancel
               </button>
@@ -3610,7 +2816,7 @@ export default function App() {
                   ? "Saving..."
                   : editingTask
                   ? "Update Task"
-                  : "Save Task"}
+                  : "Create Task"}
               </button>
             </div>
           </form>
@@ -3619,78 +2825,86 @@ export default function App() {
 
       {showInteractionModal && (
         <Modal
-          title="Add Interaction"
-          onClose={() =>
-            setShowInteractionModal(false)
+          title={
+            editingInteraction
+              ? "Edit Interaction"
+              : "Add Interaction"
           }
+          onClose={() => {
+            setShowInteractionModal(false);
+            setEditingInteraction(null);
+          }}
         >
           <form onSubmit={saveInteraction}>
-            <FormSelect
-              label="Customer"
-              value={
-                interactionForm.customerId
-              }
-              onChange={(value) =>
-                setInteractionForm({
-                  ...interactionForm,
-                  customerId: value,
-                })
-              }
-              options={[
-                {
-                  value: "",
-                  label: "Select customer",
-                },
-                ...customers.map(
-                  (customer) => ({
-                    value: customer._id,
-                    label: customer.name,
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Customer
+              </label>
+
+              <select
+                value={interactionForm.customerId}
+                onChange={(e) =>
+                  setInteractionForm({
+                    ...interactionForm,
+                    customerId: e.target.value,
                   })
-                ),
-              ]}
-            />
+                }
+                style={styles.input}
+                required
+              >
+                <option value="">
+                  Select customer
+                </option>
+
+                {customers.map((customer) => (
+                  <option
+                    key={customer._id}
+                    value={customer._id}
+                  >
+                    {customer.name}
+                    {customer.phone
+                      ? ` — ${customer.phone}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <FormSelect
               label="Type"
               value={interactionForm.type}
-              onChange={(value) =>
+              onChange={(e) =>
                 setInteractionForm({
                   ...interactionForm,
-                  type: value,
+                  type: e.target.value,
                 })
               }
               options={[
                 "Call",
                 "WhatsApp",
-                "SMS",
                 "Email",
                 "Meeting",
+                "Note",
                 "Other",
               ]}
             />
 
             <div style={styles.formGroup}>
               <label style={styles.label}>
-                Message
+                Notes
               </label>
 
               <textarea
-                rows={5}
-                value={
-                  interactionForm.message
-                }
+                value={interactionForm.notes}
                 onChange={(e) =>
                   setInteractionForm({
                     ...interactionForm,
-                    message:
-                      e.target.value,
+                    notes: e.target.value,
                   })
                 }
-                style={{
-                  ...styles.input,
-                  resize: "vertical",
-                }}
-                required
+                rows={5}
+                placeholder="Write interaction notes..."
+                style={styles.textarea}
               />
             </div>
 
@@ -3698,202 +2912,27 @@ export default function App() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowInteractionModal(
-                    false
-                  )
+                  setShowInteractionModal(false)
                 }
-                style={
-                  styles.secondaryButton
-                }
+                style={styles.secondaryButton}
               >
                 Cancel
               </button>
 
               <button
                 type="submit"
-                disabled={savingInteraction}
+                disabled={saving}
                 style={styles.primaryButton}
               >
-                {savingInteraction
+                {saving
                   ? "Saving..."
+                  : editingInteraction
+                  ? "Update Interaction"
                   : "Save Interaction"}
               </button>
             </div>
           </form>
         </Modal>
-      )}
-
-      {showCommunicationModal &&
-        communicationCustomer && (
-          <Modal
-            title="Contact Customer"
-            onClose={() =>
-              setShowCommunicationModal(
-                false
-              )
-            }
-          >
-            <div style={styles.contactBox}>
-              <div style={styles.listAvatar}>
-                {(
-                  communicationCustomer.name ||
-                  "C"
-                )
-                  .charAt(0)
-                  .toUpperCase()}
-              </div>
-
-              <div>
-                <strong>
-                  {communicationCustomer.name}
-                </strong>
-
-                <div style={styles.smallText}>
-                  {communicationCustomer.phone}
-                </div>
-              </div>
-            </div>
-
-            <FormSelect
-              label="Communication"
-              value={communicationType}
-              onChange={setCommunicationType}
-              options={[
-                "WhatsApp",
-                "Call",
-                "SMS",
-              ]}
-            />
-
-            <div style={styles.modalActions}>
-              <button
-                type="button"
-                onClick={() =>
-                  setShowCommunicationModal(
-                    false
-                  )
-                }
-                style={
-                  styles.secondaryButton
-                }
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={startCommunication}
-                style={styles.primaryButton}
-              >
-                Continue
-              </button>
-            </div>
-          </Modal>
-        )}
-    </div>
-  );
-}
-
-function FormInput({
-  label,
-  value,
-  onChange,
-  type = "text",
-  required = false,
-}) {
-  return (
-    <div style={styles.formGroup}>
-      <label style={styles.label}>
-        {label}
-      </label>
-
-      <input
-        type={type}
-        required={required}
-        value={value}
-        onChange={(e) =>
-          onChange(e.target.value)
-        }
-        style={styles.input}
-      />
-    </div>
-  );
-}
-
-function FormSelect({
-  label,
-  value,
-  onChange,
-  options = [],
-}) {
-  return (
-    <div style={styles.formGroup}>
-      <label style={styles.label}>
-        {label}
-      </label>
-
-      <select
-        value={value}
-        onChange={(e) =>
-          onChange(e.target.value)
-        }
-        style={styles.input}
-      >
-        {options.map((option, index) => {
-          const isObject =
-            typeof option === "object";
-
-          const optionValue = isObject
-            ? option.value
-            : option;
-
-          const optionLabel = isObject
-            ? option.label
-            : option;
-
-          return (
-            <option
-              key={`${optionValue}-${index}`}
-              value={optionValue}
-            >
-              {optionLabel}
-            </option>
-          );
-        })}
-      </select>
-    </div>
-  );
-}
-
-function EmptyState({
-  icon,
-  title,
-  text,
-  button,
-  onClick,
-}) {
-  return (
-    <div style={styles.emptyState}>
-      <div style={styles.emptyIcon}>
-        {icon}
-      </div>
-
-      <h3 style={{ margin: "0 0 7px" }}>
-        {title}
-      </h3>
-
-      <p style={styles.emptyText}>
-        {text}
-      </p>
-
-      {button && onClick && (
-        <button
-          type="button"
-          onClick={onClick}
-          style={styles.primaryButton}
-        >
-          {button}
-        </button>
       )}
     </div>
   );
@@ -3904,82 +2943,90 @@ const styles = {
     minHeight: "100vh",
     display: "flex",
     fontFamily:
-      "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      "Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
   },
 
   sidebar: {
-    width: 245,
+    width: 250,
     minHeight: "100vh",
     borderRight: "1px solid",
+    padding: 18,
+    boxSizing: "border-box",
     display: "flex",
     flexDirection: "column",
     position: "sticky",
     top: 0,
-    boxSizing: "border-box",
   },
 
-  logo: {
-    padding: "25px 20px",
-    fontSize: 21,
-    fontWeight: 800,
-    borderBottom: "1px solid #e5e7eb",
-  },
-
-  nav: {
-    padding: 14,
-    display: "flex",
-    flexDirection: "column",
-    gap: 5,
-  },
-
-  navButton: {
-    border: "none",
-    borderRadius: 10,
-    padding: "12px 14px",
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-    textAlign: "left",
-  },
-
-  sidebarBottom: {
-    marginTop: "auto",
-    padding: 14,
-  },
-
-  userMini: {
+  brand: {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 10,
+    fontSize: 21,
+    fontWeight: 800,
+    marginBottom: 22,
   },
 
-  avatar: {
+  brandIcon: {
+    fontSize: 25,
+  },
+
+  userBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 8px",
+    marginBottom: 15,
+  },
+
+  userAvatar: {
     width: 38,
     height: 38,
     borderRadius: "50%",
-    background: "#4f46e5",
-    color: "#fff",
+    background: "#2563eb",
+    color: "#ffffff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontWeight: 800,
   },
 
-  logoutButton: {
-    width: "100%",
-    padding: "10px 12px",
-    border: "1px solid #fecaca",
-    background: "#fff1f2",
-    color: "#be123c",
+  userName: {
+    display: "block",
+    fontSize: 14,
+  },
+
+  userRole: {
+    display: "block",
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 2,
+  },
+
+  nav: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
+  },
+
+  navButton: {
+    border: 0,
+    background: "transparent",
+    padding: "11px 12px",
     borderRadius: 9,
+    display: "flex",
+    alignItems: "center",
+    gap: 11,
     cursor: "pointer",
-    fontWeight: 600,
+    fontSize: 14,
+    textAlign: "left",
+  },
+
+  sidebarBottom: {
+    marginTop: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
   },
 
   main: {
@@ -3988,23 +3035,24 @@ const styles = {
   },
 
   topbar: {
-    minHeight: 78,
+    minHeight: 76,
     borderBottom: "1px solid",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "14px 28px",
+    padding: "14px 25px",
     boxSizing: "border-box",
   },
 
-  pageTitle: {
+  pageHeading: {
     margin: 0,
-    fontSize: 25,
+    fontSize: 24,
     fontWeight: 800,
   },
 
-  pageSubtitle: {
+  pageSubheading: {
     margin: "4px 0 0",
+    color: "#64748b",
     fontSize: 13,
   },
 
@@ -4014,103 +3062,40 @@ const styles = {
     gap: 10,
   },
 
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    border: "1px solid #e2e8f0",
-    background: "#fff",
-    cursor: "pointer",
-    fontSize: 18,
+  loadingText: {
+    color: "#64748b",
+    fontSize: 13,
   },
 
-  connectionBadge: {
-    padding: "8px 12px",
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: 700,
+  refreshButton: {
+    border: "1px solid #cbd5e1",
+    background: "transparent",
+    padding: "9px 12px",
+    borderRadius: 8,
+    cursor: "pointer",
   },
 
   content: {
-    padding: 28,
-    maxWidth: 1450,
+    padding: 25,
+    maxWidth: 1500,
     margin: "0 auto",
-    boxSizing: "border-box",
   },
 
-  welcomeCard: {
-    background:
-      "linear-gradient(135deg, #4f46e5, #6366f1)",
-    color: "#fff",
-    borderRadius: 18,
-    padding: 26,
+  welcome: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 20,
-    marginBottom: 22,
-  },
-
-  welcomeEyebrow: {
-    fontSize: 12,
-    fontWeight: 800,
-    letterSpacing: 1.5,
-    opacity: 0.8,
-  },
-
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(190px, 1fr))",
-    gap: 16,
-    marginBottom: 22,
-  },
-
-  statCard: {
-    background: "#fff",
-    border: "1px solid #e2e8f0",
-    borderRadius: 15,
-    padding: 19,
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-  },
-
-  statIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 12,
-    background: "#eef2ff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 21,
-  },
-
-  statLabel: {
-    color: "#64748b",
-    fontSize: 12,
-    marginBottom: 4,
-  },
-
-  statValue: {
-    fontSize: 23,
-    fontWeight: 800,
-  },
-
-  twoColumn: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(300px, 1fr))",
-    gap: 20,
+    gap: 15,
+    marginBottom: 20,
   },
 
   panel: {
-    background: "#fff",
+    background: "#ffffff",
     border: "1px solid #e2e8f0",
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 20,
     marginBottom: 20,
+    overflow: "hidden",
   },
 
   panelHeader: {
@@ -4123,124 +3108,134 @@ const styles = {
 
   panelTitle: {
     margin: 0,
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: 800,
   },
 
   panelSubtitle: {
-    margin: "4px 0 0",
+    margin: "5px 0 0",
     color: "#64748b",
     fontSize: 13,
   },
 
-  primaryButton: {
-    border: "none",
-    background: "#4f46e5",
-    color: "#fff",
-    borderRadius: 9,
-    padding: "10px 15px",
-    cursor: "pointer",
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-  },
-
-  secondaryButton: {
-    border: "1px solid #cbd5e1",
-    background: "#fff",
-    color: "#334155",
-    borderRadius: 9,
-    padding: "9px 14px",
-    cursor: "pointer",
-    fontWeight: 600,
-    whiteSpace: "nowrap",
-  },
-
-  quickGrid: {
+  statsGrid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(2, 1fr)",
+      "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: 15,
+    marginBottom: 20,
+  },
+
+  statsGridSmall: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: 12,
+    marginBottom: 18,
+  },
+
+  statCard: {
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 14,
+    padding: 18,
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+
+  statIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    background: "#eff6ff",
+    color: "#2563eb",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 21,
+    fontWeight: 800,
+  },
+
+  statLabel: {
+    display: "block",
+    color: "#64748b",
+    fontSize: 12,
+    marginBottom: 3,
+  },
+
+  statValue: {
+    display: "block",
+    fontSize: 22,
+  },
+
+  twoColumns: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: 20,
+  },
+
+  overviewGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(120px, 1fr))",
     gap: 10,
   },
 
-  quickButton: {
-    minHeight: 90,
+  overviewItem: {
+    background: "#f8fafc",
+    padding: 16,
+    borderRadius: 10,
+  },
+
+  miniStat: {
+    background: "#f8fafc",
     border: "1px solid #e2e8f0",
-    background: "#fff",
-    borderRadius: 12,
-    cursor: "pointer",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    color: "#334155",
+    borderRadius: 10,
+    padding: 15,
   },
 
-  list: {
+  simpleList: {
     display: "flex",
     flexDirection: "column",
   },
 
-  listItem: {
+  listRow: {
     display: "flex",
     alignItems: "center",
     gap: 11,
     padding: "11px 0",
-    borderBottom:
-      "1px solid #f1f5f9",
+    borderBottom: "1px solid #e2e8f0",
   },
 
-  listAvatar: {
+  avatar: {
     width: 38,
     height: 38,
     borderRadius: "50%",
-    background: "#eef2ff",
-    color: "#4f46e5",
+    background: "#dbeafe",
+    color: "#1d4ed8",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontWeight: 800,
-    flexShrink: 0,
-  },
-
-  smallText: {
-    color: "#64748b",
-    fontSize: 12,
-    marginTop: 3,
-  },
-
-  badge: {
-    padding: "5px 9px",
-    borderRadius: 999,
-    fontSize: 11,
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-  },
-
-  sourceBadge: {
-    display: "inline-block",
-    padding: "5px 9px",
-    background: "#f1f5f9",
-    color: "#475569",
-    borderRadius: 7,
-    fontSize: 11,
     fontWeight: 700,
   },
 
   toolbar: {
-    display: "flex",
-    gap: 10,
-    marginBottom: 18,
+    marginBottom: 16,
   },
 
   searchInput: {
     width: "100%",
-    maxWidth: 430,
+    maxWidth: 450,
     padding: "11px 13px",
     border: "1px solid #cbd5e1",
     borderRadius: 9,
     outline: "none",
     boxSizing: "border-box",
+    fontSize: 14,
+    background: "#ffffff",
+    color: "#0f172a",
   },
 
   tableWrap: {
@@ -4251,169 +3246,161 @@ const styles = {
   table: {
     width: "100%",
     borderCollapse: "collapse",
-    minWidth: 700,
+    minWidth: 750,
   },
 
   th: {
     textAlign: "left",
     padding: "12px 10px",
-    background: "#f8fafc",
-    color: "#64748b",
     fontSize: 12,
-    fontWeight: 800,
-    borderBottom:
-      "1px solid #e2e8f0",
+    color: "#64748b",
+    borderBottom: "1px solid #e2e8f0",
+    whiteSpace: "nowrap",
   },
 
   td: {
     padding: "13px 10px",
-    borderBottom:
-      "1px solid #f1f5f9",
+    borderBottom: "1px solid #e2e8f0",
     fontSize: 13,
+    verticalAlign: "top",
   },
 
-  customerCell: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
+  smallText: {
+    display: "block",
+    color: "#64748b",
+    fontSize: 11,
+    marginTop: 3,
+    lineHeight: 1.4,
   },
 
   actionRow: {
     display: "flex",
-    alignItems: "center",
-    gap: 6,
-    flexWrap: "wrap",
+    gap: 5,
   },
 
   smallAction: {
     width: 34,
     height: 34,
-    borderRadius: 8,
-    border:
-      "1px solid #e2e8f0",
-    background: "#fff",
-    cursor: "pointer",
-  },
-
-  convertButton: {
-    border: "none",
-    background: "#dcfce7",
-    color: "#166534",
+    border: "1px solid #e2e8f0",
+    background: "#ffffff",
     borderRadius: 7,
-    padding: "7px 10px",
     cursor: "pointer",
+  },
+
+  primaryButton: {
+    border: 0,
+    background: "#2563eb",
+    color: "#ffffff",
+    padding: "10px 15px",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 13,
+  },
+
+  secondaryButton: {
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#334155",
+    padding: "9px 13px",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: 13,
+  },
+
+  badge: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 8px",
+    borderRadius: 999,
     fontSize: 11,
-    fontWeight: 800,
-  },
-
-  leadSummary: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(130px, 1fr))",
-    gap: 10,
-    marginBottom: 18,
-  },
-
-  taskSummary: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(130px, 1fr))",
-    gap: 10,
-    marginBottom: 18,
-  },
-
-  miniStat: {
-    border:
-      "1px solid #e2e8f0",
-    borderRadius: 10,
-    padding: 13,
-    background: "#f8fafc",
-  },
-
-  reportList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-    marginTop: 15,
-  },
-
-  reportRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "12px 13px",
-    background: "#f8fafc",
-    borderRadius: 9,
-  },
-
-  settingRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 15,
-    padding: "15px 0",
-    borderBottom:
-      "1px solid #e2e8f0",
+    fontWeight: 700,
+    background: "#f1f5f9",
+    color: "#334155",
   },
 
   emptyState: {
     textAlign: "center",
-    padding: "55px 20px",
-    color: "#475569",
+    padding: "45px 20px",
   },
 
   emptyIcon: {
-    fontSize: 42,
-    marginBottom: 12,
+    fontSize: 40,
+    marginBottom: 8,
+  },
+
+  emptyTitle: {
+    margin: 0,
+    fontSize: 18,
   },
 
   emptyText: {
     color: "#64748b",
-    maxWidth: 450,
-    margin: "0 auto 18px",
-    lineHeight: 1.5,
+    fontSize: 13,
+    margin: "7px 0 17px",
+  },
+
+  errorBox: {
+    background: "#fee2e2",
+    color: "#991b1b",
+    border: "1px solid #fecaca",
+    borderRadius: 9,
+    padding: "11px 13px",
+    marginBottom: 15,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    fontSize: 13,
+  },
+
+  errorClose: {
+    border: 0,
+    background: "transparent",
+    color: "#991b1b",
+    cursor: "pointer",
+    fontSize: 18,
   },
 
   overlay: {
     position: "fixed",
     inset: 0,
-    background:
-      "rgba(15, 23, 42, 0.55)",
+    background: "rgba(15, 23, 42, 0.58)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: 15,
     zIndex: 1000,
     overflowY: "auto",
   },
 
   modal: {
     width: "100%",
-    background: "#fff",
-    borderRadius: 17,
-    padding: 22,
-    boxSizing: "border-box",
+    background: "#ffffff",
+    borderRadius: 14,
+    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
     maxHeight: "92vh",
     overflowY: "auto",
   },
 
   modalHeader: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    justifyContent: "space-between",
+    padding: "17px 20px",
+    borderBottom: "1px solid #e2e8f0",
   },
 
   modalTitle: {
     margin: 0,
-    fontSize: 20,
-    fontWeight: 800,
+    fontSize: 18,
   },
 
   closeButton: {
-    width: 35,
-    height: 35,
-    border: "none",
+    width: 34,
+    height: 34,
+    border: 0,
     borderRadius: 8,
     background: "#f1f5f9",
     cursor: "pointer",
@@ -4421,22 +3408,19 @@ const styles = {
     color: "#475569",
   },
 
-  formGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(2, minmax(0, 1fr))",
-    gap: 13,
+  modalBody: {
+    padding: 20,
   },
 
   formGroup: {
-    marginBottom: 14,
+    marginBottom: 15,
   },
 
   label: {
     display: "block",
     fontSize: 12,
     fontWeight: 700,
-    color: "#475569",
+    color: "#334155",
     marginBottom: 6,
   },
 
@@ -4444,13 +3428,26 @@ const styles = {
     width: "100%",
     boxSizing: "border-box",
     padding: "11px 12px",
-    border:
-      "1px solid #cbd5e1",
-    borderRadius: 9,
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
     outline: "none",
     fontSize: 14,
-    background: "#fff",
+    background: "#ffffff",
     color: "#0f172a",
+  },
+
+  textarea: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "11px 12px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    outline: "none",
+    fontSize: 14,
+    background: "#ffffff",
+    color: "#0f172a",
+    resize: "vertical",
+    fontFamily: "inherit",
   },
 
   modalActions: {
@@ -4460,52 +3457,68 @@ const styles = {
     marginTop: 20,
   },
 
-  contactBox: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    background: "#f8fafc",
-    borderRadius: 11,
-    marginBottom: 16,
+  reportGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 15,
   },
 
-  globalError: {
-    margin: "16px 28px 0",
-    padding: "11px 14px",
-    background: "#fee2e2",
-    color: "#991b1b",
-    border:
-      "1px solid #fecaca",
-    borderRadius: 9,
+  reportCard: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 18,
+  },
+
+  settingsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+
+  settingRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 10,
+    gap: 15,
+    padding: 16,
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
   },
 
-  errorClose: {
-    border: "none",
-    background: "transparent",
-    color: "#991b1b",
+  toggle: {
+    width: 44,
+    height: 24,
+    border: 0,
+    borderRadius: 999,
+    padding: 2,
     cursor: "pointer",
-    fontSize: 18,
+    transition: "background 0.2s",
   },
 
-  loadingBar: {
-    margin: "12px 28px 0",
-    padding: "8px 12px",
-    background: "#eef2ff",
-    color: "#4338ca",
-    borderRadius: 8,
-    fontSize: 12,
+  toggleDot: {
+    display: "block",
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    background: "#ffffff",
+    transition: "transform 0.2s",
+  },
+
+  onlineBadge: {
+    color: "#166534",
+    background: "#dcfce7",
+    padding: "5px 9px",
+    borderRadius: 999,
+    fontSize: 11,
     fontWeight: 700,
   },
 
   authPage: {
     minHeight: "100vh",
     background:
-      "linear-gradient(135deg, #eef2ff, #f8fafc)",
+      "linear-gradient(135deg, #eff6ff, #f8fafc)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -4515,71 +3528,48 @@ const styles = {
 
   authCard: {
     width: "100%",
-    maxWidth: 410,
-    background: "#fff",
-    borderRadius: 20,
-    padding: 30,
-    boxShadow:
-      "0 20px 60px rgba(15, 23, 42, 0.12)",
+    maxWidth: 420,
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 28,
     boxSizing: "border-box",
+    boxShadow:
+      "0 20px 50px rgba(15,23,42,0.10)",
   },
 
-  authLogo: {
+  logoCircle: {
     width: 60,
     height: 60,
-    borderRadius: 16,
-    background: "#eef2ff",
+    borderRadius: 18,
+    background: "#eff6ff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 29,
-    margin: "0 auto 13px",
+    fontSize: 30,
+    margin: "0 auto 12px",
   },
 
   authTitle: {
     textAlign: "center",
     margin: 0,
-    fontSize: 28,
-    fontWeight: 900,
+    fontSize: 27,
   },
 
   authSubtitle: {
     textAlign: "center",
     color: "#64748b",
-    margin: "7px 0 25px",
-  },
-
-  errorBox: {
-    padding: "10px 12px",
-    background: "#fee2e2",
-    color: "#991b1b",
-    border:
-      "1px solid #fecaca",
-    borderRadius: 8,
+    margin: "6px 0 22px",
     fontSize: 13,
-    marginBottom: 15,
-  },
-
-  authSwitch: {
-    textAlign: "center",
-    marginTop: 18,
-    fontSize: 13,
-    color: "#64748b",
   },
 
   linkButton: {
-    border: "none",
+    display: "block",
+    margin: "18px auto 0",
+    border: 0,
     background: "transparent",
-    color: "#4f46e5",
-    fontWeight: 800,
+    color: "#2563eb",
     cursor: "pointer",
-  },
-
-  authNote: {
-    textAlign: "center",
-    color: "#94a3b8",
-    fontSize: 11,
-    marginTop: 15,
+    fontSize: 13,
   },
 };
-```
