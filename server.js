@@ -10,6 +10,7 @@ const authRoutes = require("./src/routes/authRoutes");
 const dealRoutes = require("./src/routes/dealRoutes");
 const interactionRoutes = require("./src/routes/interactionRoutes");
 const leadRoutes = require("./src/routes/leadRoutes");
+const taskRoutes = require("./src/routes/taskRoutes");
 
 const app = express();
 
@@ -72,6 +73,8 @@ app.use("/deals", dealRoutes);
 app.use("/interactions", interactionRoutes);
 
 app.use("/leads", leadRoutes);
+
+app.use("/tasks", taskRoutes);
 
 // ===============================
 // 404 Handler
